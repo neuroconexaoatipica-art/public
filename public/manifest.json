@@ -1,0 +1,29 @@
+{
+  "name": "NeuroConexão Atípica",
+  "short_name": "NeuroConexão",
+  "description": "Rede social para mentes intensas e neurodivergentes. Conexão real, sem performar normalidade.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#81D8D0",
+  "background_color": "#000000",
+  "lang": "pt-BR",
+  "categories": ["social", "lifestyle"],
+  "icons": [
+    { "src": "/favicon-16.png", "sizes": "16x16", "type": "image/png" },
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "NeuroConexão Atípica - Onde mentes intensas se encontram"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Documentação - NeuroConexão Atípica</title>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #000; color: #fff; padding: 40px; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #81D8D0; margin-bottom: 30px; }
+        .doc-card { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+        .doc-card h2 { color: #81D8D0; margin-top: 0; }
+        button { background: #81D8D0; color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 12px; margin-bottom: 12px; }
+        button:hover { opacity: 0.9; }
+        .instructions { background: rgba(200,16,46,0.1); border-left: 4px solid #C8102E; padding: 16px; margin-top: 20px; border-radius: 8px; }
+        code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Documentação NeuroConexão Atípica</h1>
+        <p>Clique nos botões abaixo para copiar o conteúdo dos documentos:</p>
+        <div class="doc-card">
+            <h2>ROADMAP_REDE_SOCIAL.md</h2>
+            <p>Guia completo de evolução da plataforma. Use para investidores e planejamento.</p>
+            <button onclick="copyToClipboard('roadmap')">Copiar Conteúdo</button>
+            <button onclick="downloadFile('roadmap')">Baixar Arquivo</button>
+        </div>
+        <div class="doc-card">
+            <h2>BUBBLE_PRIVACY_RULES.md</h2>
+            <p>Regras de privacidade completas para implementação no Bubble.</p>
+            <button onclick="copyToClipboard('privacy')">Copiar Conteúdo</button>
+            <button onclick="downloadFile('privacy')">Baixar Arquivo</button>
+        </div>
+        <div class="doc-card">
+            <h2>GUIA_COMPLETO_BUBBLE.md</h2>
+            <p>Manual pixel-perfect para reconstrução no Bubble.</p>
+            <button onclick="copyToClipboard('guia')">Copiar Conteúdo</button>
+            <button onclick="downloadFile('guia')">Baixar Arquivo</button>
+        </div>
+        <div class="instructions">
+            <h3>Como acessar os arquivos originais:</h3>
+            <ol>
+                <li>Abra o DevTools (pressione <code>F12</code>)</li>
+                <li>Vá para a aba <code>Sources</code></li>
+                <li>Navegue até a raiz do projeto (<code>/</code>)</li>
+                <li>Encontre os arquivos</li>
+                <li>Clique com botão direito → Copy content</li>
+            </ol>
+        </div>
+    </div>
+    <script>
+        function copyToClipboard(doc) {
+            alert('Para copiar o documento, vá até a página "Recursos" no site ou use DevTools (F12) → Sources.');
+        }
+        function downloadFile(doc) {
+            alert('Os arquivos estão na raiz do projeto. Acesse via DevTools (F12) → Sources.');
+        }
+    </script>
+</body>
+</html>

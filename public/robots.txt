@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://neuroconexaoatipica.com.br/sitemap.xml

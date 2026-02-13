@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Limpar Cache - NeuroConexão Atípica</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #000; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .container { max-width: 600px; background: #35363A; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 40px; text-align: center; }
+    h1 { color: #81D8D0; margin-bottom: 20px; font-size: 28px; }
+    p { color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 30px; }
+    button { background: #81D8D0; color: #000; border: none; padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; margin: 10px; }
+    button:hover { background: #70C7BF; transform: translateY(-2px); }
+    button:active { transform: translateY(0); }
+    .success { background: rgba(129, 216, 208, 0.2); border: 1px solid #81D8D0; padding: 20px; border-radius: 12px; margin-top: 20px; display: none; }
+    .success.show { display: block; }
+    .info { background: rgba(255, 107, 53, 0.2); border: 1px solid #FF6B35; padding: 15px; border-radius: 12px; margin-top: 20px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Limpeza de Cache</h1>
+    <p>Se o site está lento ou travando, clique no botão abaixo para limpar o cache e recarregar a página.</p>
+    <button onclick="limparCache()">Limpar Cache e Recarregar</button>
+    <button onclick="voltarParaSite()">Voltar para o Site</button>
+    <div id="success" class="success">Cache limpo com sucesso!<br>Redirecionando em 3 segundos...</div>
+    <div class="info"><strong>Nota:</strong> Esta ação vai limpar dados temporários do navegador, mas não vai deslogar você do site.</div>
+  </div>
+  <script>
+    function limparCache() {
+      try {
+        var supabaseKeys = Object.keys(localStorage).filter(function(key) { return key.startsWith('sb-') || key.includes('supabase'); });
+        var supabaseData = {};
+        supabaseKeys.forEach(function(key) { supabaseData[key] = localStorage.getItem(key); });
+        localStorage.clear();
+        sessionStorage.clear();
+        Object.entries(supabaseData).forEach(function(entry) { localStorage.setItem(entry[0], entry[1]); });
+        localStorage.setItem('app_version', 'v1.0.0');
+        document.getElementById('success').classList.add('show');
+        setTimeout(function() { window.location.href = '/'; }, 3000);
+      } catch (error) { alert('Erro ao limpar cache: ' + error.message); }
+    }
+    function voltarParaSite() { window.location.href = '/'; }
+  </script>
+</body>
+</html>
