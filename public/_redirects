@@ -1,6 +1,3 @@
-# Páginas estáticas (acessíveis como URL real para Google Play e crawlers)
 /privacy    /privacy.html    200
 /terms      /terms.html      200
-
-# SPA fallback (todas as outras rotas servem o app React)
 /*    /index.html   200
