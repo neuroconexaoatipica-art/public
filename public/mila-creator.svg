@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-  <rect width="400" height="400" rx="48" fill="#1A1A1A"/>
-  <circle cx="200" cy="150" r="60" fill="#81D8D0" opacity="0.3"/>
-  <ellipse cx="200" cy="320" rx="90" ry="80" fill="#81D8D0" opacity="0.2"/>
-  <text x="200" y="390" text-anchor="middle" font-size="14" font-family="Inter, sans-serif" fill="#C0C0C0">Foto da Criadora</text>
-</svg>
