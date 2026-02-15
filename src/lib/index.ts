@@ -1,7 +1,9 @@
 export { supabase } from './supabase';
-export type { User, Community, Post, LiveInterest, UserRole } from './supabase';
+export type { User, Community, Post, LiveInterest, Comment, UserRole } from './supabase';
 export { usePosts } from './usePosts';
 export type { PostWithAuthor } from './usePosts';
+export { useComments } from './useComments';
+export type { CommentWithAuthor } from './useComments';
 export { useImageUpload } from './useImageUpload';
 export type { CommunityWithMeta } from './CommunitiesContext';
 export { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';
@@ -9,4 +11,3 @@ export type { CommunityConfig } from './communitiesConfig';
 export { hasAppAccess, hasModAccess, getDefaultPage } from './roleEngine';
 export { ProfileProvider, useProfileContext } from './ProfileContext';
 export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
-export { useComments } from './useComments';

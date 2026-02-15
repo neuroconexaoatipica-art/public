@@ -34,7 +34,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
 
     if (error) {
       console.error('Erro ao deletar post:', error);
-      setDeleteError('Não foi possível deletar. Tente novamente ou contate a administração.');
+      setDeleteError('Nao foi possivel deletar. Tente novamente ou contate a administracao.');
       setIsDeleting(false);
       setTimeout(() => setDeleteError(null), 5000);
       return;
@@ -57,12 +57,12 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
       const diffDays = Math.floor(diffMs / 86400000);
 
       if (diffMins < 1) return 'agora mesmo';
-      if (diffMins < 60) return `há ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
-      if (diffHours < 24) return `há ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
-      if (diffDays < 7) return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
-      return `há ${Math.floor(diffDays / 7)} semana${Math.floor(diffDays / 7) > 1 ? 's' : ''}`;
+      if (diffMins < 60) return 'ha ' + diffMins + ' minuto' + (diffMins > 1 ? 's' : '');
+      if (diffHours < 24) return 'ha ' + diffHours + ' hora' + (diffHours > 1 ? 's' : '');
+      if (diffDays < 7) return 'ha ' + diffDays + ' dia' + (diffDays > 1 ? 's' : '');
+      return 'ha ' + Math.floor(diffDays / 7) + ' semana' + (Math.floor(diffDays / 7) > 1 ? 's' : '');
     } catch {
-      return 'há alguns instantes';
+      return 'ha alguns instantes';
     }
   };
 
@@ -80,7 +80,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
     if (!config) return null;
 
     return (
-      <span className={`px-2 py-0.5 ${config.bg} ${config.text} rounded-full text-xs font-semibold`}>
+      <span className={config.bg + " " + config.text + " px-2 py-0.5 rounded-full text-xs font-semibold"}>
         {config.label}
       </span>
     );
@@ -93,11 +93,10 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
       transition={{ duration: 0.3 }}
       className="bg-white/3 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-colors"
     >
-      {/* Header do Post */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3 flex-1">
           <UserAvatar
-            name={post.author_data?.name || 'Anônimo'}
+            name={post.author_data?.name || 'Anonimo'}
             photoUrl={post.author_data?.profile_photo}
             size="lg"
             onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
@@ -107,9 +106,9 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <button
                 onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
-                className={`font-semibold text-white truncate ${onAuthorClick ? 'hover:text-[#81D8D0] transition-colors cursor-pointer' : ''}`}
+                className={"font-semibold text-white truncate" + (onAuthorClick ? " hover:text-[#81D8D0] transition-colors cursor-pointer" : "")}
               >
-                {post.author_data?.name || 'Anônimo'}
+                {post.author_data?.name || 'Anonimo'}
               </button>
               {getRoleBadge()}
             </div>
@@ -119,7 +118,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
               {post.is_public ? (
                 <span className="flex items-center gap-1">
                   <Globe className="h-3 w-3" />
-                  Público
+                  Publico
                 </span>
               ) : (
                 <span className="flex items-center gap-1">
@@ -138,12 +137,11 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         </div>
       </div>
 
-      {/* Conteúdo do Post */}
       <div className="mb-4">
         <p className="text-white/90 text-base leading-relaxed whitespace-pre-wrap">
           {post.content}
         </p>
-        
+
         {post.image_url && (
           <div className="mt-4">
             <img
@@ -156,15 +154,14 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         )}
       </div>
 
-      {/* Ações do Post */}
       <div className="flex items-center gap-6 pt-4 border-t border-white/5">
         <button
           onClick={() => {
             if (navigator.share) {
-              navigator.share({ 
-                title: 'NeuroConexão Atípica', 
+              navigator.share({
+                title: 'NeuroConexao Atipica',
                 text: post.content.substring(0, 100),
-                url: window.location.href 
+                url: window.location.href
               }).catch(() => {});
             }
           }}
@@ -174,18 +171,17 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
           <span className="text-sm font-medium">Compartilhar</span>
         </button>
 
-        {/* Botão Denúncia */}
         <button
           onClick={() => {
-            const subject = encodeURIComponent('Denúncia de conteúdo — NeuroConexão Atípica');
-            const body = encodeURIComponent(
-              `Estou denunciando o seguinte conteúdo:\n\n` +
-              `Post de: ${post.author_data?.name || 'Desconhecido'}\n` +
-              `Conteúdo: "${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}"\n` +
-              `ID do post: ${post.id}\n\n` +
-              `Motivo da denúncia:\n[Descreva aqui]`
+            var subject = encodeURIComponent('Denuncia de conteudo - NeuroConexao Atipica');
+            var body = encodeURIComponent(
+              'Estou denunciando o seguinte conteudo:\n\n' +
+              'Post de: ' + (post.author_data?.name || 'Desconhecido') + '\n' +
+              'Conteudo: "' + post.content.substring(0, 200) + (post.content.length > 200 ? '...' : '') + '"\n' +
+              'ID do post: ' + post.id + '\n\n' +
+              'Motivo da denuncia:\n[Descreva aqui]'
             );
-            window.open(`mailto:contato@neuroconexaoatipica.com.br?subject=${subject}&body=${body}`, '_blank');
+            window.open('mailto:contato@neuroconexaoatipica.com.br?subject=' + subject + '&body=' + body, '_blank');
           }}
           className="flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors"
         >
@@ -208,7 +204,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
       {deleteError && (
         <div className="mt-3 px-4 py-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl flex items-center gap-3">
           <span className="text-sm text-[#C8102E] font-medium flex-1">{deleteError}</span>
-          <button 
+          <button
             onClick={() => setDeleteError(null)}
             className="text-[#C8102E]/60 hover:text-[#C8102E] text-xs font-semibold"
           >
@@ -217,7 +213,6 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         </div>
       )}
 
-      {/* Sistema de Comentários */}
       <CommentSection
         postId={post.id}
         onAuthorClick={onAuthorClick}
