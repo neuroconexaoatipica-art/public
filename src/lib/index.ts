@@ -9,3 +9,4 @@ export type { CommunityConfig } from './communitiesConfig';
 export { hasAppAccess, hasModAccess, getDefaultPage } from './roleEngine';
 export { ProfileProvider, useProfileContext } from './ProfileContext';
 export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
+export { useComments } from './useComments';
