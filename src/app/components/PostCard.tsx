@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Share2, Trash2, Globe, Lock, Flag } from "lucide-react";
+import { Share2, Trash2, Globe, Lock, Flag, Pin, PinOff } from "lucide-react";
 import { motion } from "motion/react";
 import type { PostWithAuthor } from "../../lib";
 import { supabase } from "../../lib";
@@ -9,14 +9,16 @@ import { CommentSection } from "./CommentSection";
 interface PostCardProps {
   post: PostWithAuthor;
   onDelete?: (postId: string) => void;
+  onPinToggle?: () => void;
   currentUserId?: string;
   canModerate?: boolean;
   onAuthorClick?: (userId: string) => void;
   communityName?: string;
 }
 
-export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorClick, communityName }: PostCardProps) {
+export function PostCard({ post, onDelete, onPinToggle, currentUserId, canModerate, onAuthorClick, communityName }: PostCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPinning, setIsPinning] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isOwnPost = currentUserId === post.author;
@@ -34,7 +36,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
 
     if (error) {
       console.error('Erro ao deletar post:', error);
-      setDeleteError('Nao foi possivel deletar. Tente novamente ou contate a administracao.');
+      setDeleteError('Não foi possível deletar. Tente novamente ou contate a administração.');
       setIsDeleting(false);
       setTimeout(() => setDeleteError(null), 5000);
       return;
@@ -47,6 +49,28 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
     setIsDeleting(false);
   };
 
+  const handleTogglePin = async () => {
+    if (isPinning) return;
+    setIsPinning(true);
+
+    const newPinned = !post.is_pinned;
+
+    const { error } = await supabase
+      .from('posts')
+      .update({ is_pinned: newPinned })
+      .eq('id', post.id);
+
+    if (error) {
+      console.error('Erro ao fixar/desafixar post:', error);
+    }
+
+    setIsPinning(false);
+
+    if (onPinToggle) {
+      onPinToggle();
+    }
+  };
+
   const getTimeAgo = () => {
     try {
       const now = new Date();
@@ -57,12 +81,12 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
       const diffDays = Math.floor(diffMs / 86400000);
 
       if (diffMins < 1) return 'agora mesmo';
-      if (diffMins < 60) return 'ha ' + diffMins + ' minuto' + (diffMins > 1 ? 's' : '');
-      if (diffHours < 24) return 'ha ' + diffHours + ' hora' + (diffHours > 1 ? 's' : '');
-      if (diffDays < 7) return 'ha ' + diffDays + ' dia' + (diffDays > 1 ? 's' : '');
-      return 'ha ' + Math.floor(diffDays / 7) + ' semana' + (Math.floor(diffDays / 7) > 1 ? 's' : '');
+      if (diffMins < 60) return `há ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+      if (diffHours < 24) return `há ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+      if (diffDays < 7) return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+      return `há ${Math.floor(diffDays / 7)} semana${Math.floor(diffDays / 7) > 1 ? 's' : ''}`;
     } catch {
-      return 'ha alguns instantes';
+      return 'há alguns instantes';
     }
   };
 
@@ -80,7 +104,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
     if (!config) return null;
 
     return (
-      <span className={config.bg + " " + config.text + " px-2 py-0.5 rounded-full text-xs font-semibold"}>
+      <span className={`px-2 py-0.5 ${config.bg} ${config.text} rounded-full text-xs font-semibold`}>
         {config.label}
       </span>
     );
@@ -91,24 +115,39 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="bg-white/3 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-colors"
+      className={`border rounded-2xl p-6 hover:bg-white/5 transition-colors ${
+        post.is_pinned
+          ? 'bg-[#81D8D0]/5 border-[#81D8D0]/30'
+          : 'bg-white/3 border-white/10'
+      }`}
     >
+      {/* Badge Fixado */}
+      {post.is_pinned && (
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#81D8D0]/20">
+          <Pin className="h-4 w-4 text-[#81D8D0]" />
+          <span className="text-sm font-semibold text-[#81D8D0]">Fixado</span>
+        </div>
+      )}
+
+      {/* Header do Post */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3 flex-1">
+          {/* Avatar clicável */}
           <UserAvatar
-            name={post.author_data?.name || 'Anonimo'}
+            name={post.author_data?.name || 'Anônimo'}
             photoUrl={post.author_data?.profile_photo}
             size="lg"
             onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
           />
 
+          {/* Info do Autor */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <button
                 onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
-                className={"font-semibold text-white truncate" + (onAuthorClick ? " hover:text-[#81D8D0] transition-colors cursor-pointer" : "")}
+                className={`font-semibold text-white truncate ${onAuthorClick ? 'hover:text-[#81D8D0] transition-colors cursor-pointer' : ''}`}
               >
-                {post.author_data?.name || 'Anonimo'}
+                {post.author_data?.name || 'Anônimo'}
               </button>
               {getRoleBadge()}
             </div>
@@ -118,7 +157,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
               {post.is_public ? (
                 <span className="flex items-center gap-1">
                   <Globe className="h-3 w-3" />
-                  Publico
+                  Público
                 </span>
               ) : (
                 <span className="flex items-center gap-1">
@@ -137,11 +176,13 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         </div>
       </div>
 
+      {/* Conteúdo do Post */}
       <div className="mb-4">
         <p className="text-white/90 text-base leading-relaxed whitespace-pre-wrap">
           {post.content}
         </p>
-
+        
+        {/* Imagem do Post */}
         {post.image_url && (
           <div className="mt-4">
             <img
@@ -154,14 +195,15 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         )}
       </div>
 
-      <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+      {/* Ações do Post */}
+      <div className="flex items-center gap-4 pt-4 border-t border-white/5 flex-wrap">
         <button
           onClick={() => {
             if (navigator.share) {
-              navigator.share({
-                title: 'NeuroConexao Atipica',
+              navigator.share({ 
+                title: 'NeuroConexão Atípica', 
                 text: post.content.substring(0, 100),
-                url: window.location.href
+                url: window.location.href 
               }).catch(() => {});
             }
           }}
@@ -171,17 +213,18 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
           <span className="text-sm font-medium">Compartilhar</span>
         </button>
 
+        {/* Botão Denúncia */}
         <button
           onClick={() => {
-            var subject = encodeURIComponent('Denuncia de conteudo - NeuroConexao Atipica');
-            var body = encodeURIComponent(
-              'Estou denunciando o seguinte conteudo:\n\n' +
-              'Post de: ' + (post.author_data?.name || 'Desconhecido') + '\n' +
-              'Conteudo: "' + post.content.substring(0, 200) + (post.content.length > 200 ? '...' : '') + '"\n' +
-              'ID do post: ' + post.id + '\n\n' +
-              'Motivo da denuncia:\n[Descreva aqui]'
+            const subject = encodeURIComponent('Denúncia de conteúdo — NeuroConexão Atípica');
+            const body = encodeURIComponent(
+              `Estou denunciando o seguinte conteúdo:\n\n` +
+              `Post de: ${post.author_data?.name || 'Desconhecido'}\n` +
+              `Conteúdo: "${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}"\n` +
+              `ID do post: ${post.id}\n\n` +
+              `Motivo da denúncia:\n[Descreva aqui]`
             );
-            window.open('mailto:contato@neuroconexaoatipica.com.br?subject=' + subject + '&body=' + body, '_blank');
+            window.open(`mailto:contato@neuroconexaoatipica.com.br?subject=${subject}&body=${body}`, '_blank');
           }}
           className="flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors"
         >
@@ -189,6 +232,29 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
           <span className="text-sm font-medium">Denunciar</span>
         </button>
 
+        {/* Botão Fixar/Desafixar (founder/admin) */}
+        {canModerate && (
+          <button
+            onClick={handleTogglePin}
+            disabled={isPinning}
+            className={`flex items-center gap-2 transition-colors disabled:opacity-50 ${
+              post.is_pinned
+                ? 'text-[#81D8D0] hover:text-[#81D8D0]/70'
+                : 'text-white/60 hover:text-[#81D8D0]'
+            }`}
+          >
+            {post.is_pinned ? (
+              <PinOff className="h-4 w-4" />
+            ) : (
+              <Pin className="h-4 w-4" />
+            )}
+            <span className="text-sm font-medium">
+              {post.is_pinned ? 'Desafixar' : 'Fixar'}
+            </span>
+          </button>
+        )}
+
+        {/* Botão Deletar */}
         {(isOwnPost || canModerate) && onDelete && (
           <button
             onClick={handleDelete}
@@ -201,10 +267,11 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         )}
       </div>
 
+      {/* Mensagem de erro ao deletar */}
       {deleteError && (
         <div className="mt-3 px-4 py-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl flex items-center gap-3">
           <span className="text-sm text-[#C8102E] font-medium flex-1">{deleteError}</span>
-          <button
+          <button 
             onClick={() => setDeleteError(null)}
             className="text-[#C8102E]/60 hover:text-[#C8102E] text-xs font-semibold"
           >
@@ -213,6 +280,7 @@ export function PostCard({ post, onDelete, currentUserId, canModerate, onAuthorC
         </div>
       )}
 
+      {/* Sistema de Comentários */}
       <CommentSection
         postId={post.id}
         onAuthorClick={onAuthorClick}
