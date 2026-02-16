@@ -7,8 +7,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
-    storage: window.localStorage,
+    detectSessionInUrl: false,    // SPA sem OAuth redirect — evita parse desnecessário
+    storage: window.localStorage,  // Explícito: evita fallback para memória
   },
   global: {
     headers: {
@@ -20,6 +20,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Tipos TypeScript para o banco de dados
 export type UserRole = 'visitor' | 'user_free' | 'member' | 'founder' | 'admin';
 
 export interface User {
@@ -32,6 +33,9 @@ export interface User {
   access_released: boolean;
   onboarding_done: boolean;
   onboarding_data: Record<string, any> | null;
+  whatsapp: string | null;
+  allow_whatsapp: boolean;
+  allow_email: boolean;
   created_at: string;
 }
 
@@ -50,6 +54,7 @@ export interface Post {
   author: string;
   community: string | null;
   is_public: boolean;
+  is_pinned: boolean;
   image_url: string | null;
   created_at: string;
 }
@@ -61,6 +66,7 @@ export interface LiveInterest {
   message: string | null;
   created_at: string;
 }
+
 export interface Comment {
   id: string;
   post_id: string;
