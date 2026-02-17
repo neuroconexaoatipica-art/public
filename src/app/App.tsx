@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { supabase } from "../lib/supabase";
-import { 
-  hasAppAccess, 
-  ProfileProvider, 
-  CommunitiesProvider, 
-  useProfileContext 
+import {
+  hasAppAccess,
+  ProfileProvider,
+  CommunitiesProvider,
+  useProfileContext,
 } from "../lib";
 import type { CommunityWithMeta } from "../lib";
 
@@ -47,3 +47,68 @@ type PageType =
   | "communities"
   | "community-detail"
   | "roadmap";
+
+// Componente interno
+function AppContent() {
+  const { user: currentUser, isLoading } = useProfileContext();
+  const [currentPage, setCurrentPage] = useState<PageType>("home");
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (currentUser) {
+      if (hasAppAccess(currentUser.role)) {
+        setCurrentPage("social-hub");
+      } else {
+        setCurrentPage("index");
+      }
+    } else {
+      setCurrentPage("home");
+    }
+  }, [currentUser, isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <LogoIcon size={64} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black">
+      {currentPage === "home" && <HeroSection onCtaClick={() => {}} />}
+      {currentPage === "social-hub" && (
+  <SocialHub
+    onNavigateToProfile={() => {}}
+    onNavigateToCommunities={() => {}}
+    onNavigateToFeed={() => {}}
+    onNavigateToUserProfile={() => {}}
+  />
+)}
+
+{currentPage === "index" && (
+  <IndexPage
+    onNavigateToCommunities={() => {}}
+    onNavigateToProfile={() => {}}
+    onNavigateToRoadmap={() => {}}
+    onNavigateToUserProfile={() => {}}
+  />
+)}
+
+    </div>
+  );
+}
+
+// EXPORT DEFAULT CORRETO
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <ProfileProvider>
+        <CommunitiesProvider>
+          <AppContent />
+        </CommunitiesProvider>
+      </ProfileProvider>
+    </ErrorBoundary>
+  );
+}

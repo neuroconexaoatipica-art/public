@@ -13,3 +13,14 @@ export function getDefaultPage(role: UserRole | null | undefined): string {
   if (role === 'user_free') return 'index';
   return 'home';
 }
+export function normalizeRole(role: UserRole | string | null | undefined): UserRole {
+  if (!role) return 'user_free';
+
+  const normalized = String(role).toLowerCase().trim();
+
+  if (normalized === 'member') return 'member';
+  if (normalized === 'founder') return 'founder';
+  if (normalized === 'admin') return 'admin';
+
+  return 'user_free';
+}
