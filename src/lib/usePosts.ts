@@ -75,7 +75,8 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
       const { data: pinData, error: pinErr } = await buildQuery(true);
       if (pinErr) {
         const { data: raw } = await supabase.from('posts').select('*')
-          .eq('is_pinned', true).order('created_at', { ascending: false })
+          .eq('is_pinned', true)
+          .order('created_at', { ascending: false })
           .order('id', { ascending: false });
         setPinnedPosts(raw ? await enrichWithAuthors(raw) : []);
       } else {
