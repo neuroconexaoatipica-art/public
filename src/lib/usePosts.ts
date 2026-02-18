@@ -13,15 +13,15 @@ interface UsePostsOptions {
 }
 
 const PAGE_SIZE = 20;
-const QUERY_TIMEOUT = 10000; // 10s safety
+const QUERY_TIMEOUT = 12000; // 12s — cobre cold start
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error('Timeout: servidor não respondeu')), ms)
     ),
-  ]);
+  ]) as Promise<T>;
 }
 
 export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = false) {

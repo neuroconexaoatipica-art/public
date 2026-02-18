@@ -14,10 +14,20 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
+// Timeout helper — cancela se demorar demais
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout ${label} (${ms}ms)`)), ms)
+    ),
+  ]) as Promise<T>;
+}
+
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const isLoadingRef = useRef(true);
+  const isLoadingRef = useRef(true); // ref para evitar stale closure no timeout
 
   const loadProfile = useCallback(async (userId?: string) => {
     try {
@@ -34,33 +44,37 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      let { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', uid)
-        .single();
+      let { data, error } = await withTimeout(
+        supabase.from('users').select('*').eq('id', uid).single(),
+        8000,
+        'profile-select'
+      );
 
       // SAFETY NET: registro não existe na tabela users → criar automaticamente
       if (error && (error as any).code === 'PGRST116') {
         console.warn('Safety net: usuário não encontrado em users, criando registro...');
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          const { data: newUser, error: insertError } = await supabase
-            .from('users')
-            .insert({
-              id: uid,
-              name: authUser.user_metadata?.name || 'Novo Membro',
-              role: 'user_free',
-              access_released: false,
-              onboarding_done: false,
-              whatsapp: authUser.user_metadata?.whatsapp
-                ? [authUser.user_metadata.whatsapp]
-                : null,
-              allow_whatsapp: authUser.user_metadata?.allow_whatsapp || false,
-              allow_email: authUser.user_metadata?.allow_email ?? true,
-            })
-            .select()
-            .single();
+          const { data: newUser, error: insertError } = await withTimeout(
+            supabase
+              .from('users')
+              .insert({
+                id: uid,
+                name: authUser.user_metadata?.name || 'Novo Membro',
+                role: 'user_free',
+                access_released: false,
+                onboarding_done: false,
+                whatsapp: authUser.user_metadata?.whatsapp
+                  ? [authUser.user_metadata.whatsapp]
+                  : null,
+                allow_whatsapp: authUser.user_metadata?.allow_whatsapp || false,
+                allow_email: authUser.user_metadata?.allow_email ?? true,
+              })
+              .select()
+              .single(),
+            8000,
+            'profile-insert'
+          );
 
           if (!insertError && newUser) {
             data = newUser;
@@ -76,34 +90,34 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // SYNC: trigger do banco não salva whatsapp/allow_* do signup.
-      // Se o registro existe mas whatsapp está vazio, preencher a partir de user_metadata.
+      // SYNC: preencher whatsapp a partir de user_metadata se vazio
+      // Feito em background — não bloqueia o loading
       if (data && (!data.whatsapp || (Array.isArray(data.whatsapp) && data.whatsapp.length === 0))) {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        const metaWa = authUser?.user_metadata?.whatsapp;
-        if (metaWa) {
-          const patch: Record<string, any> = {
-            whatsapp: [metaWa],
-            allow_whatsapp: authUser!.user_metadata?.allow_whatsapp || false,
-            allow_email: authUser!.user_metadata?.allow_email ?? true,
-          };
-          const { data: patched, error: patchErr } = await supabase
-            .from('users')
-            .update(patch)
-            .eq('id', uid)
-            .select()
-            .single();
-
-          if (!patchErr && patched) {
-            console.log('Sync: whatsapp preenchido a partir de user_metadata');
-            data = patched;
-          } else {
-            console.warn('Sync: falha ao preencher whatsapp:', patchErr);
+        // Fire-and-forget: não esperar por isso
+        supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+          const metaWa = authUser?.user_metadata?.whatsapp;
+          if (metaWa && uid) {
+            supabase
+              .from('users')
+              .update({
+                whatsapp: [metaWa],
+                allow_whatsapp: authUser!.user_metadata?.allow_whatsapp || false,
+                allow_email: authUser!.user_metadata?.allow_email ?? true,
+              })
+              .eq('id', uid)
+              .select()
+              .single()
+              .then(({ data: patched, error: patchErr }) => {
+                if (!patchErr && patched) {
+                  console.log('Sync: whatsapp preenchido a partir de user_metadata');
+                  setUser({ ...patched, role: normalizeRole(patched.role) });
+                }
+              });
           }
-        }
+        }).catch(() => { /* ignorar erros de sync */ });
       }
 
-      // Normalizar role para evitar problemas de case/whitespace
+      // Normalizar role
       if (data) {
         data = { ...data, role: normalizeRole(data.role) };
       }
@@ -121,14 +135,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Timeout de segurança — usa REF para não capturar valor stale
+    // Timeout de segurança — 10s para cobrir cold start do Supabase free tier
     const timeout = setTimeout(() => {
       if (isMounted && isLoadingRef.current) {
-        console.warn('Profile: timeout de 3s — forçando saída do loading');
+        console.warn('Profile: timeout de 10s atingido, liberando UI');
         setIsLoading(false);
         isLoadingRef.current = false;
       }
-    }, 3000);
+    }, 10000);
 
     // Carga inicial
     loadProfile();
@@ -137,6 +151,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (!isMounted) return;
 
       if (event === 'SIGNED_IN' && session) {
+        isLoadingRef.current = true;
+        setIsLoading(true);
         await loadProfile(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -154,12 +170,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     try {
       if (!user?.id) throw new Error('Usuário não autenticado');
 
-      const { data, error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase.from('users').update(updates).eq('id', user.id).select().single(),
+        10000,
+        'profile-update'
+      );
 
       if (error) throw error;
 
@@ -179,12 +194,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
       const filePath = `profile-photos/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
+      const { error: uploadError } = await withTimeout(
+        supabase.storage.from('avatars').upload(filePath, file, {
           cacheControl: '3600',
           upsert: true
-        });
+        }),
+        15000,
+        'photo-upload'
+      );
 
       if (uploadError) throw uploadError;
 
@@ -192,13 +209,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         .from('avatars')
         .getPublicUrl(filePath);
 
-      // Atualizar perfil com nova foto
-      const { data, error } = await supabase
-        .from('users')
-        .update({ profile_photo: publicUrl })
-        .eq('id', user.id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase.from('users').update({ profile_photo: publicUrl }).eq('id', user.id).select().single(),
+        10000,
+        'photo-update'
+      );
 
       if (error) throw error;
 

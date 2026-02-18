@@ -1,7 +1,7 @@
-// Service Worker — NeuroConexão Atípica v4
+// Service Worker — NeuroConexão Atípica v5
 // Estratégia: Network-only + fallback offline
 // NÃO cacheia HTML/JS/CSS — Vite hash faz isso nativamente
-const CACHE_NAME = 'neuroconexao-v4';
+const CACHE_NAME = 'neuroconexao-v5';
 const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Só intercepta navegação — tudo mais vai direto pro browser
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() =>
@@ -28,5 +29,4 @@ self.addEventListener('fetch', (event) => {
       )
     );
   }
-  // Qualquer outro request: browser lida sozinho (sem SW cache)
 });

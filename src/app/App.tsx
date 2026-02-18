@@ -26,24 +26,9 @@ import { hasAppAccess, ProfileProvider, CommunitiesProvider, useProfileContext }
 import type { CommunityWithMeta } from "../lib";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogoIcon } from "./components/LogoIcon";
+import { SupabaseDiag } from "./components/SupabaseDiag";
 
 type PageType = 'home' | 'ethics' | 'warnings' | 'privacy' | 'terms' | 'index' | 'social-hub' | 'profile' | 'profile-user' | 'feed' | 'communities' | 'community-detail' | 'roadmap';
-
-// Função que resolve a página inicial baseada no hash e no user
-function resolveInitialPage(user: any): PageType {
-  const hash = window.location.hash.replace('#', '');
-  const publicPages: Record<string, PageType> = {
-    'privacy': 'privacy',
-    'terms': 'terms',
-    'ethics': 'ethics',
-    'warnings': 'warnings',
-  };
-  if (hash && publicPages[hash]) return publicPages[hash];
-  if (user) {
-    return hasAppAccess(user.role) ? 'social-hub' : 'index';
-  }
-  return 'home';
-}
 
 // Componente interno que consome os Contexts
 function AppContent() {
@@ -53,23 +38,41 @@ function AppContent() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageType>('home');
-  const [hasResolvedInitial, setHasResolvedInitial] = useState(false);
 
   // Estado para visualização de perfil de outro usuário
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   // Estado para visualização de comunidade individual
   const [viewingCommunity, setViewingCommunity] = useState<CommunityWithMeta | null>(null);
 
-  // Roteamento baseado em role — executa UMA VEZ quando loading resolve
+  // Roteamento baseado em role — executa quando user muda
   useEffect(() => {
     if (isLoading) return;
 
-    const page = resolveInitialPage(currentUser);
-    setCurrentPage(page);
-    setHasResolvedInitial(true);
+    // Checar hash da URL para roteamento direto (ex: #privacy, #terms)
+    const hash = window.location.hash.replace('#', '');
+    const publicPages: Record<string, PageType> = {
+      'privacy': 'privacy',
+      'terms': 'terms',
+      'ethics': 'ethics',
+      'warnings': 'warnings',
+    };
+    if (hash && publicPages[hash]) {
+      setCurrentPage(publicPages[hash]);
+      return;
+    }
+
+    if (currentUser) {
+      if (hasAppAccess(currentUser.role)) {
+        setCurrentPage('social-hub');
+      } else {
+        setCurrentPage('index');
+      }
+    } else {
+      setCurrentPage('home');
+    }
   }, [currentUser, isLoading]);
 
-  // Escutar mudanças de hash (ex: usuário digitar #privacy na URL)
+  // Escutar mudancas de hash (ex: usuario digitar #privacy na URL)
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
@@ -243,8 +246,7 @@ function AppContent() {
           />
         );
       
-      // Landing Page — case explícito + default
-      case 'home':
+      // Landing Page
       default:
         return (
           <>
@@ -259,10 +261,10 @@ function AppContent() {
   };
 
   // Páginas que NÃO mostram header/footer institucional
-  const hideHeaderFooterPages: PageType[] = ['index', 'social-hub', 'profile', 'profile-user', 'feed', 'communities', 'community-detail', 'roadmap'];
+  const hideHeaderFooterPages = ['index', 'social-hub', 'profile', 'profile-user', 'feed', 'communities', 'community-detail', 'roadmap'];
   const shouldShowHeaderFooter = !hideHeaderFooterPages.includes(currentPage);
 
-  // Loading inicial — APENAS isLoading controla (sem gate secundário)
+  // Loading inicial — só depende de isLoading
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -275,6 +277,7 @@ function AppContent() {
           <LogoIcon size={64} className="h-16 w-16 mx-auto mb-5" />
           <h1 className="text-xl font-semibold text-white mb-4">NeuroConexão Atípica</h1>
           <div className="w-10 h-10 border-3 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-white/40 text-sm mt-4">Conectando ao servidor...</p>
         </motion.div>
       </div>
     );
@@ -334,6 +337,7 @@ export default function App() {
       <ProfileProvider>
         <CommunitiesProvider>
           <AppContent />
+          <SupabaseDiag />
         </CommunitiesProvider>
       </ProfileProvider>
     </ErrorBoundary>

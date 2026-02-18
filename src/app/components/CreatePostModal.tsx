@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Loader2, Globe, Lock, Image, Trash2 } from "lucide-react";
-import { supabase, useImageUpload, useCommunitiesContext, hasAppAccess } from "../../lib";
+import { X, Loader2, Globe, Lock, Image, Trash2, RefreshCw } from "lucide-react";
+import { supabase, useImageUpload, useCommunitiesContext } from "../../lib";
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -10,17 +10,21 @@ interface CreatePostModalProps {
   defaultCommunityId?: string | null;
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ieieohtnaymykxiqnmlc.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllaWVvaHRuYXlteWt4aXFubWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTQ1NzMsImV4cCI6MjA4NjA3MDU3M30.32LjQe1dQLGAfbyfK8KkjNlXOGkZGaWEgI20y3gl3Hc';
+
 export function CreatePostModal({ isOpen, onClose, onPostCreated, defaultCommunityId }: CreatePostModalProps) {
   const [content, setContent] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [selectedCommunity, setSelectedCommunity] = useState<string | null>(defaultCommunityId || null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { uploadImage, isUploading } = useImageUpload();
+  const { uploadImage } = useImageUpload();
   const { communities } = useCommunitiesContext();
 
   const realCommunities = communities.filter(c => !c.id.startsWith('pending-') && !c.id.startsWith('local-'));
@@ -28,12 +32,126 @@ export function CreatePostModal({ isOpen, onClose, onPostCreated, defaultCommuni
   useEffect(() => {
     if (isOpen) {
       setSelectedCommunity(defaultCommunityId || null);
+      setError("");
+      setDebugInfo("");
     }
   }, [isOpen, defaultCommunityId]);
 
+  // Tenta criar post via supabase-js, se falhar tenta via fetch nativo
+  const doSubmit = async () => {
+    setError("");
+    setDebugInfo("");
+    setIsLoading(true);
+
+    try {
+      // 1. Pegar sessão (local, instantâneo)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('LOGIN: Você precisa estar logado. Faça logout e entre novamente.');
+      }
+
+      const userId = session.user.id;
+      const accessToken = session.access_token;
+
+      // 2. Upload de imagem se necessário
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        try {
+          const uploadResult = await uploadImage(imageFile, 'avatars', 'post-images');
+          if (!uploadResult.success || !uploadResult.url) {
+            throw new Error(uploadResult.error || 'Falha no upload');
+          }
+          imageUrl = uploadResult.url;
+        } catch (e: any) {
+          throw new Error(`UPLOAD: ${e.message}`);
+        }
+      }
+
+      // 3. Criar post — SEM verificar role (RLS cuida disso)
+      const postPayload = {
+        content: content.trim(),
+        author: userId,
+        is_public: isPublic,
+        community: selectedCommunity,
+        image_url: imageUrl,
+      };
+
+      // Tentativa 1: supabase-js (5s timeout)
+      let postCreated = false;
+      try {
+        const result = await Promise.race([
+          supabase.from('posts').insert(postPayload).select().single(),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('SB_TIMEOUT')), 5000)),
+        ]);
+        const { error: postError } = result as any;
+        if (postError) {
+          setDebugInfo(`supabase-js: ${postError.code} — ${postError.message} — ${postError.hint || ''}`);
+          throw new Error(`RLS/DB: ${postError.message}`);
+        }
+        postCreated = true;
+      } catch (e: any) {
+        if (e.message === 'SB_TIMEOUT') {
+          setDebugInfo('supabase-js travou (5s). Tentando fetch nativo...');
+          // Tentativa 2: fetch nativo (10s timeout)
+          try {
+            const resp = await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: SUPABASE_KEY,
+                Authorization: `Bearer ${accessToken}`,
+                Prefer: 'return=representation',
+              },
+              body: JSON.stringify(postPayload),
+              signal: AbortSignal.timeout(10000),
+            });
+
+            if (resp.ok) {
+              postCreated = true;
+              setDebugInfo('fetch nativo OK!');
+            } else {
+              const body = await resp.text();
+              setDebugInfo(`fetch nativo: HTTP ${resp.status} — ${body}`);
+              throw new Error(`HTTP ${resp.status}: ${body}`);
+            }
+          } catch (fe: any) {
+            if (fe.name === 'TimeoutError') {
+              setDebugInfo('fetch nativo TAMBÉM travou (10s). Problema é no Supabase/banco.');
+              throw new Error('SERVIDOR: O banco de dados não está respondendo. Verifique se o projeto Supabase está ativo no dashboard.');
+            }
+            throw fe;
+          }
+        } else {
+          throw e;
+        }
+      }
+
+      if (postCreated) {
+        setIsLoading(false);
+        setContent("");
+        setIsPublic(false);
+        setSelectedCommunity(null);
+        setImageFile(null);
+        setImagePreview(null);
+        onClose();
+        onPostCreated?.();
+
+        setCooldown(30);
+        const timer = setInterval(() => {
+          setCooldown(prev => {
+            if (prev <= 1) { clearInterval(timer); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err.message || 'Erro desconhecido');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (content.trim().length === 0 && !imageFile) {
       setError("Escreva algo ou adicione uma imagem antes de publicar");
       return;
@@ -42,84 +160,7 @@ export function CreatePostModal({ isOpen, onClose, onPostCreated, defaultCommuni
       setError("Post muito longo. Máximo 5000 caracteres");
       return;
     }
-
-    setError("");
-    setIsLoading(true);
-
-    // Safety timeout — 15s máximo
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-      setError("A operação demorou demais. Verifique sua conexão e tente novamente.");
-    }, 15000);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        throw new Error('Você precisa estar logado para criar um post');
-      }
-
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (userError || !userData || !hasAppAccess(userData.role)) {
-        clearTimeout(safetyTimer);
-        setError('Apenas membros podem criar posts. Solicite acesso para participar.');
-        setIsLoading(false);
-        return;
-      }
-
-      let imageUrl: string | null = null;
-      if (imageFile) {
-        const uploadResult = await uploadImage(imageFile, 'avatars', 'post-images');
-        if (!uploadResult.success || !uploadResult.url) {
-          throw new Error(uploadResult.error || 'Erro ao carregar a imagem');
-        }
-        imageUrl = uploadResult.url;
-      }
-
-      const { error: postError } = await supabase
-        .from('posts')
-        .insert({
-          content: content.trim(),
-          author: session.user.id,
-          is_public: isPublic,
-          community: selectedCommunity,
-          image_url: imageUrl
-        })
-        .select()
-        .single();
-
-      if (postError) throw postError;
-
-      clearTimeout(safetyTimer);
-      setIsLoading(false);
-      setContent("");
-      setIsPublic(false);
-      setSelectedCommunity(null);
-      setImageFile(null);
-      setImagePreview(null);
-      onClose();
-
-      if (onPostCreated) {
-        onPostCreated();
-      }
-
-      setCooldown(30);
-      const timer = setInterval(() => {
-        setCooldown(prev => {
-          if (prev <= 1) { clearInterval(timer); return 0; }
-          return prev - 1;
-        });
-      }, 1000);
-
-    } catch (err: any) {
-      clearTimeout(safetyTimer);
-      setIsLoading(false);
-      setError(err.message || 'Erro ao criar post. Tente novamente.');
-    }
+    await doSubmit();
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,9 +316,13 @@ export function CreatePostModal({ isOpen, onClose, onPostCreated, defaultCommuni
                 </div>
               </div>
 
+              {/* Erro + debug info */}
               {error && (
-                <div className="p-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl">
+                <div className="p-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl space-y-1">
                   <p className="text-sm text-[#C8102E] font-semibold">{error}</p>
+                  {debugInfo && (
+                    <p className="text-xs text-[#C8102E]/70 font-mono break-all">{debugInfo}</p>
+                  )}
                 </div>
               )}
 
@@ -290,6 +335,18 @@ export function CreatePostModal({ isOpen, onClose, onPostCreated, defaultCommuni
                 >
                   Cancelar
                 </button>
+
+                {error && !isLoading && (
+                  <button
+                    type="button"
+                    onClick={doSubmit}
+                    className="flex-1 py-3 bg-[#FF6B35] text-white rounded-xl hover:bg-[#FF6B35]/90 transition-colors font-bold flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    Tentar de Novo
+                  </button>
+                )}
+
                 <button
                   type="submit"
                   disabled={isLoading || cooldown > 0 || (content.trim().length === 0 && !imageFile)}
