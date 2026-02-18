@@ -36,7 +36,8 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
     let q = supabase
       .from('posts')
       .select(`*, author_data:users!author(id,name,profile_photo,role,bio)`)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
 
     const o = optionsRef.current;
     if (o.isPublicFeed) q = q.eq('is_public', true);
@@ -64,7 +65,6 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
 
   const loadPosts = useCallback(async () => {
     const o = optionsRef.current;
-    // Se authorId é explicitamente passado mas é null/undefined/empty, não carregar
     if ('authorId' in o && !o.authorId) {
       setPinnedPosts([]); setRegularPosts([]); setIsLoading(false); return;
     }
@@ -74,9 +74,9 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
       // Pinned posts
       const { data: pinData, error: pinErr } = await buildQuery(true);
       if (pinErr) {
-        // Fallback: buscar sem JOIN
         const { data: raw } = await supabase.from('posts').select('*')
-          .eq('is_pinned', true).order('created_at', { ascending: false });
+          .eq('is_pinned', true).order('created_at', { ascending: false })
+          .order('id', { ascending: false });
         setPinnedPosts(raw ? await enrichWithAuthors(raw) : []);
       } else {
         setPinnedPosts((pinData as PostWithAuthor[]) || []);
@@ -85,9 +85,10 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
       // Regular posts (first page)
       const { data: regData, error: regErr } = await buildQuery(false).limit(PAGE_SIZE + 1);
       if (regErr) {
-        // Fallback
         let fq = supabase.from('posts').select('*').eq('is_pinned', false)
-          .order('created_at', { ascending: false }).limit(PAGE_SIZE + 1);
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(PAGE_SIZE + 1);
         if (o.isPublicFeed) fq = fq.eq('is_public', true);
         if (o.communityId)  fq = fq.eq('community', o.communityId);
         if (o.authorId)     fq = fq.eq('author', o.authorId);
@@ -110,17 +111,22 @@ export function usePosts(isPublicFeedOrOptions: boolean | UsePostsOptions = fals
     if (!hasMore || isLoadingMore) return;
     const last = regularPosts[regularPosts.length - 1];
     if (!last) return;
+
+    // Cursor composto: (created_at, id) — evita duplicatas/perdas
+    const cursorFilter = `created_at.lt.${last.created_at},and(created_at.eq.${last.created_at},id.lt.${last.id})`;
+
     try {
       setIsLoadingMore(true);
       const { data, error: err } = await buildQuery(false)
-        .lt('created_at', last.created_at)
+        .or(cursorFilter)
         .limit(PAGE_SIZE + 1);
       if (err) {
-        // Fallback
         const o = optionsRef.current;
         let fq = supabase.from('posts').select('*').eq('is_pinned', false)
-          .lt('created_at', last.created_at)
-          .order('created_at', { ascending: false }).limit(PAGE_SIZE + 1);
+          .or(cursorFilter)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(PAGE_SIZE + 1);
         if (o.isPublicFeed) fq = fq.eq('is_public', true);
         if (o.communityId)  fq = fq.eq('community', o.communityId);
         if (o.authorId)     fq = fq.eq('author', o.authorId);
