@@ -5,7 +5,7 @@ import { LogoIcon } from "./LogoIcon";
 import { CreatePostModal } from "./CreatePostModal";
 import { PostCard } from "./PostCard";
 import { UserAvatar } from "./UserAvatar";
-import { usePosts, hasAppAccess, hasModAccess, useProfileContext, useCommunitiesContext, useSeats, supabase } from "../../lib";
+import { usePosts, hasAppAccess, hasModAccess, useProfileContext, useCommunitiesContext, useSeats, supabase, normalizeRole } from "../../lib";
 import type { User as UserType } from "../../lib";
 
 interface SocialHubProps {
@@ -18,13 +18,13 @@ interface SocialHubProps {
 export function SocialHub({ onNavigateToProfile, onNavigateToCommunities, onNavigateToFeed, onNavigateToUserProfile }: SocialHubProps) {
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const { posts, isLoading, refreshPosts } = usePosts(false);
+  const { posts, isLoading, isLoadingMore, hasMore, loadMore, refreshPosts } = usePosts(false);
   const { user } = useProfileContext();
   const { communities } = useCommunitiesContext();
-  const { seatsUsed, seatsTotal, seatsRemaining, isFull } = useSeats();
+  const { seatsUsed, seatsTotal, isFull, refreshSeats } = useSeats();
   const canPost = hasAppAccess(user?.role);
   const canModerate = hasModAccess(user?.role);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = normalizeRole(user?.role) === 'admin';
 
   // Ordenar: fixados primeiro, depois por data
   const sortedPosts = [...posts].sort((a, b) => {
@@ -197,7 +197,7 @@ export function SocialHub({ onNavigateToProfile, onNavigateToCommunities, onNavi
                   <p className="text-xs text-white/60">
                     {isFull
                       ? 'Vagas esgotadas'
-                      : `${seatsRemaining} vaga${seatsRemaining !== 1 ? 's' : ''} restante${seatsRemaining !== 1 ? 's' : ''}`
+                      : `${seatsTotal - seatsUsed} vaga${seatsTotal - seatsUsed !== 1 ? 's' : ''} restante${seatsTotal - seatsUsed !== 1 ? 's' : ''}`
                     }
                   </p>
                 </div>
@@ -273,6 +273,19 @@ export function SocialHub({ onNavigateToProfile, onNavigateToCommunities, onNavi
                     />
                   ))
                 )}
+                {isLoadingMore && (
+                  <div className="text-center py-6">
+                    <div className="w-8 h-8 border-3 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  </div>
+                )}
+                {hasMore && (
+                  <button
+                    onClick={loadMore}
+                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#81D8D0] hover:bg-[#81D8D0]/90 text-black rounded-xl transition-colors font-bold"
+                  >
+                    Carregar mais posts
+                  </button>
+                )}
               </div>
             </motion.div>
           </main>
@@ -290,35 +303,24 @@ export function SocialHub({ onNavigateToProfile, onNavigateToCommunities, onNavi
 }
 
 // ─── ADMIN PANEL ────────────────────────────────────────────────────────────
-// Painel simples para promover/rebaixar usuários sem usar o Supabase Dashboard
+// Painel para gerenciar usuários: promover member→founder, remover acesso
 
 function AdminPanel({ onClose }: { onClose: () => void }) {
-  const [pendingUsers, setPendingUsers] = useState<UserType[]>([]);
   const [allUsers, setAllUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'all'>('pending');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { seatsUsed, seatsTotal, isFull, refreshSeats } = useSeats();
 
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      // user_free aguardando aprovação
-      const { data: pending } = await supabase
-        .from('users')
-        .select('*')
-        .eq('role', 'user_free')
-        .order('created_at', { ascending: false });
-
-      // Todos os membros ativos
       const { data: active } = await supabase
         .from('users')
         .select('*')
         .in('role', ['member', 'founder', 'admin'])
         .order('created_at', { ascending: false });
 
-      setPendingUsers(pending || []);
       setAllUsers(active || []);
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
@@ -339,41 +341,79 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
 
     setActionLoading(userId);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
-        .update({ role: newRole })
-        .eq('id', userId);
+        .update({ role: newRole, access_released: true })
+        .eq('id', userId)
+        .select()
+        .single();
 
       if (error) {
         console.error('Erro ao promover:', error);
         alert(`Erro ao promover: ${error.message}`);
+      } else if (!data) {
+        console.error('Promoção sem efeito — possível RLS bloqueando');
+        alert('Erro: atualização não teve efeito. Verifique as policies RLS no Supabase.');
       } else {
         await loadUsers();
         await refreshSeats();
+        // Log administrativo
+        await supabase.from('admin_logs').insert({
+          admin_id: (await supabase.auth.getUser()).data.user?.id,
+          action: 'PROMOTE',
+          target_user_id: userId,
+          details: { new_role: newRole }
+        });
       }
     } catch (err) {
       console.error('Erro:', err);
+      alert('Erro inesperado ao promover usuário.');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const demoteUser = async (userId: string) => {
-    if (!confirm('Rebaixar este usuário para lista de espera?')) return;
+  const removeAccess = async (userId: string, currentRole: string) => {
+    // founder → member (perde moderação, mantém acesso)
+    // member → visitor (perde acesso total)
+    const newRole = currentRole === 'founder' ? 'member' : 'visitor';
+    const actionLabel = currentRole === 'founder'
+      ? 'Rebaixar para membro? Perderá acesso de moderação.'
+      : 'Remover acesso deste usuário? Perderá acesso à plataforma.';
+
+    if (!confirm(actionLabel)) return;
 
     setActionLoading(userId);
     try {
       const { error } = await supabase
         .from('users')
-        .update({ role: 'user_free' })
+        .update({
+          role: newRole,
+          access_released: newRole !== 'visitor',
+        })
         .eq('id', userId);
 
       if (error) {
-        console.error('Erro ao rebaixar:', error);
+        console.error('Erro ao remover acesso:', error);
         alert(`Erro: ${error.message}`);
       } else {
         await loadUsers();
         await refreshSeats();
+        // Log administrativo com rastreabilidade completa
+        const adminUser = (await supabase.auth.getUser()).data.user;
+        await supabase.from('admin_logs').insert({
+          admin_id: adminUser?.id,
+          action: currentRole === 'founder' ? 'DEMOTE' : 'REMOVE_ACCESS',
+          target_user_id: userId,
+          details: {
+            previous_role: currentRole,
+            new_role: newRole,
+            timestamp: new Date().toISOString(),
+            context: currentRole === 'founder'
+              ? 'Founder rebaixado para member via AdminPanel'
+              : 'Member removido — acesso revogado via AdminPanel',
+          },
+        });
       }
     } catch (err) {
       console.error('Erro:', err);
@@ -396,7 +436,7 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
       case 'admin': return 'Admin';
       case 'founder': return 'Fundadora';
       case 'member': return 'Membro';
-      default: return 'Aguardando';
+      default: return 'Visitante';
     }
   };
 
@@ -425,177 +465,104 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'pending'
-              ? 'bg-[#FF6B35] text-white'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
-          }`}
-        >
-          Aguardando ({pendingUsers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'all'
-              ? 'bg-[#81D8D0] text-black'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
-          }`}
-        >
-          Ativos ({allUsers.length})
-        </button>
+      {/* Header da lista */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold text-white/60">
+          Membros ativos ({allUsers.length})
+        </span>
       </div>
 
       {isLoading ? (
         <div className="text-center py-6">
           <div className="w-8 h-8 border-3 border-[#C8102E] border-t-transparent rounded-full animate-spin mx-auto"></div>
         </div>
-      ) : activeTab === 'pending' ? (
+      ) : (
         <div className="space-y-3 max-h-[400px] overflow-y-auto">
-          {pendingUsers.length === 0 ? (
+          {allUsers.length === 0 ? (
             <p className="text-sm text-white/40 text-center py-4">
-              Nenhum usuário aguardando aprovação
+              Nenhum membro ativo
             </p>
           ) : (
-            pendingUsers.map((u) => (
+            allUsers.map((u) => (
               <div
                 key={u.id}
-                className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3"
+                className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-4"
               >
-                {/* Linha 1: Avatar + Info + Botões */}
-                <div className="flex items-center gap-3">
-                  <UserAvatar name={u.name} photoUrl={u.profile_photo} size="md" />
-                  <div className="flex-1 min-w-0">
+                <UserAvatar name={u.name} photoUrl={u.profile_photo} size="md" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
                     <p className="font-semibold text-white truncate">{u.name}</p>
-                    <p className="text-xs text-white/50 truncate">{u.email}</p>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getRoleBadgeColor(u.role)}`}>
+                      {getRoleLabel(u.role)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
                     <p className="text-xs text-white/30">
                       {new Date(u.created_at).toLocaleDateString('pt-BR')}
                     </p>
-                  </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => promoteUser(u.id, 'member')}
-                      disabled={actionLoading === u.id || isFull}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-[#81D8D0] text-black rounded-lg text-xs font-bold hover:bg-[#81D8D0]/90 disabled:opacity-50 transition-all"
-                    >
-                      <UserCheck className="h-3.5 w-3.5" />
-                      Membro
-                    </button>
-                    <button
-                      onClick={() => promoteUser(u.id, 'founder')}
-                      disabled={actionLoading === u.id || isFull}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-[#FF6B35] text-white rounded-lg text-xs font-bold hover:bg-[#FF6B35]/90 disabled:opacity-50 transition-all"
-                    >
-                      <UserCheck className="h-3.5 w-3.5" />
-                      Fundador
-                    </button>
-                  </div>
-                </div>
-
-                {/* Linha 2: WhatsApp + Autorização + Copiar */}
-                <div className="flex items-center gap-3 pl-12 flex-wrap">
-                  {u.whatsapp ? (
-                    <>
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-green-400" />
-                        <span className="text-xs text-white/70 font-mono">
-                          {u.whatsapp.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3')}
-                        </span>
-                      </div>
-                      <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        u.allow_whatsapp 
-                          ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${u.allow_whatsapp ? 'bg-green-400' : 'bg-red-400'}`}></span>
-                        {u.allow_whatsapp ? 'WhatsApp OK' : 'Sem autorização'}
-                      </div>
-                      {u.allow_whatsapp && (
-                        <button
-                          onClick={() => {
-                            const msg = `Olá, ${u.name}.\nSeu acesso ao Beta Fechado da NeuroConexão Atípica foi aprovado.\nAqui está seu link para entrar:\nhttps://neuroconexaoatipica.com.br\n\nNos vemos lá.`;
-                            navigator.clipboard.writeText(msg).then(() => {
-                              setCopiedId(u.id);
-                              setTimeout(() => setCopiedId(null), 2000);
-                            });
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-white/60 hover:text-white transition-all"
-                        >
-                          {copiedId === u.id ? (
-                            <>
-                              <CheckCircle className="h-3 w-3 text-green-400" />
-                              <span className="text-green-400">Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3 w-3" />
-                              <span>Copiar msg</span>
-                            </>
+                    {u.whatsapp && u.whatsapp.length > 0 && (() => {
+                      const phone = Array.isArray(u.whatsapp) ? u.whatsapp[0] : u.whatsapp;
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3 w-3 text-green-400" />
+                          <span className="text-xs text-white/50 font-mono">
+                            {phone.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3')}
+                          </span>
+                          {u.allow_whatsapp && (
+                            <button
+                              onClick={() => {
+                                const msg = `Olá, ${u.name}.\nSeu acesso ao Beta Fechado da NeuroConexão Atípica foi aprovado.\nAqui está seu link para entrar:\nhttps://neuroconexaoatipica.com.br\n\nNos vemos lá.`;
+                                navigator.clipboard.writeText(msg).then(() => {
+                                  setCopiedId(u.id);
+                                  setTimeout(() => setCopiedId(null), 2000);
+                                });
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white/50 hover:text-white transition-all"
+                            >
+                              {copiedId === u.id ? (
+                                <>
+                                  <CheckCircle className="h-3 w-3 text-green-400" />
+                                  <span className="text-green-400">Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3 w-3" />
+                                  <span>Copiar msg</span>
+                                </>
+                              )}
+                            </button>
                           )}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-xs text-white/30 italic">WhatsApp não informado</span>
-                  )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
+                {u.role !== 'admin' && (
+                  <div className="flex gap-2 flex-shrink-0">
+                    {u.role === 'member' && (
+                      <button
+                        onClick={() => promoteUser(u.id, 'founder')}
+                        disabled={actionLoading === u.id}
+                        className="px-3 py-2 bg-[#FF6B35]/20 text-[#FF6B35] rounded-lg text-xs font-bold hover:bg-[#FF6B35]/30 disabled:opacity-50 transition-all"
+                      >
+                        Promover
+                      </button>
+                    )}
+                    <button
+                      onClick={() => removeAccess(u.id, u.role)}
+                      disabled={actionLoading === u.id}
+                      className="flex items-center gap-1 px-3 py-2 bg-white/5 text-white/40 rounded-lg text-xs font-medium hover:bg-[#C8102E]/20 hover:text-[#C8102E] disabled:opacity-50 transition-all"
+                    >
+                      <UserX className="h-3.5 w-3.5" />
+                      Remover acesso
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
-          {isFull && pendingUsers.length > 0 && (
-            <div className="bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-lg p-3">
-              <p className="text-xs text-[#C8102E] font-semibold text-center">
-                Limite de {seatsTotal} vagas atingido. Não é possível aprovar mais membros.
-              </p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-3 max-h-[400px] overflow-y-auto">
-          {allUsers.map((u) => (
-            <div
-              key={u.id}
-              className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-4"
-            >
-              <UserAvatar name={u.name} photoUrl={u.profile_photo} size="md" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-white truncate">{u.name}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getRoleBadgeColor(u.role)}`}>
-                    {getRoleLabel(u.role)}
-                  </span>
-                </div>
-                <p className="text-xs text-white/50 truncate">{u.email}</p>
-              </div>
-              {u.role !== 'admin' && (
-                <div className="flex gap-2 flex-shrink-0">
-                  {u.role === 'member' && (
-                    <button
-                      onClick={() => promoteUser(u.id, 'founder')}
-                      disabled={actionLoading === u.id}
-                      className="px-3 py-2 bg-[#FF6B35]/20 text-[#FF6B35] rounded-lg text-xs font-bold hover:bg-[#FF6B35]/30 disabled:opacity-50 transition-all"
-                    >
-                      Promover
-                    </button>
-                  )}
-                  <button
-                    onClick={() => demoteUser(u.id)}
-                    disabled={actionLoading === u.id}
-                    className="flex items-center gap-1 px-3 py-2 bg-white/5 text-white/40 rounded-lg text-xs font-medium hover:bg-[#C8102E]/20 hover:text-[#C8102E] disabled:opacity-50 transition-all"
-                  >
-                    <UserX className="h-3.5 w-3.5" />
-                    Rebaixar
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       )}
     </motion.div>
   );
 }
-

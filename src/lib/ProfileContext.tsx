@@ -15,7 +15,7 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
-// Timeout helper
+// Timeout helper — cancela se demorar demais
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promise<T> {
   return Promise.race([
     promise,
@@ -28,7 +28,7 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promis
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const isLoadingRef = useRef(true);
+  const isLoadingRef = useRef(true); // ref para evitar stale closure no timeout
 
   const loadProfile = useCallback(async (userId?: string) => {
     try {
@@ -51,7 +51,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         'profile-select'
       );
 
-      // SAFETY NET: registro não existe na tabela users
+      // SAFETY NET: registro não existe na tabela users → criar automaticamente
       if (error && (error as any).code === 'PGRST116') {
         console.warn('Safety net: usuário não encontrado em users, criando registro...');
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -62,8 +62,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
               .insert({
                 id: uid,
                 name: authUser.user_metadata?.name || 'Novo Membro',
-                role: 'user_free',
-                access_released: false,
+                role: 'member',
+                access_released: true,
                 onboarding_done: false,
                 whatsapp: authUser.user_metadata?.whatsapp
                   ? [authUser.user_metadata.whatsapp]
@@ -92,7 +92,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       // SYNC: preencher whatsapp a partir de user_metadata se vazio
+      // Feito em background — não bloqueia o loading
       if (data && (!data.whatsapp || (Array.isArray(data.whatsapp) && data.whatsapp.length === 0))) {
+        // Fire-and-forget: não esperar por isso
         supabase.auth.getUser().then(({ data: { user: authUser } }) => {
           const metaWa = authUser?.user_metadata?.whatsapp;
           if (metaWa && uid) {
@@ -113,9 +115,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                 }
               });
           }
-        }).catch(() => {});
+        }).catch(() => { /* ignorar erros de sync */ });
       }
 
+      // Normalizar role
       if (data) {
         data = { ...data, role: normalizeRole(data.role) };
       }
@@ -129,17 +132,24 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ÚNICO listener de auth para toda a aplicação
   useEffect(() => {
     let isMounted = true;
 
-    // FAST PATH: visitante sem sessão no localStorage = landing instantânea
+    // ═══════════════════════════════════════════════════════════════
+    // FAST PATH: Se não existe sessão no localStorage, o visitante
+    // vê a landing page INSTANTANEAMENTE (0ms) em vez de esperar
+    // 10-25s pelo cold start do Supabase free tier.
+    // ═══════════════════════════════════════════════════════════════
     const hasStoredSession = !!localStorage.getItem(SUPABASE_STORAGE_KEY);
 
     if (!hasStoredSession) {
+      // Visitante puro — sem sessão, sem espera
       setUser(null);
       setIsLoading(false);
       isLoadingRef.current = false;
 
+      // Ainda escutar auth changes (caso faça login depois)
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!isMounted) return;
         if (event === 'SIGNED_IN' && session) {
@@ -157,7 +167,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // SLOW PATH: usuário com sessão — carrega perfil com safety net
+    // ═══════════════════════════════════════════════════════════════
+    // SLOW PATH: Usuário com sessão armazenada — carrega perfil
+    // com safety net de 10s (antes era 25s)
+    // ═══════════════════════════════════════════════════════════════
     const timeout = setTimeout(() => {
       if (isMounted && isLoadingRef.current) {
         console.warn('Profile: timeout de segurança atingido, liberando UI');
@@ -166,6 +179,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       }
     }, TIMEOUTS.SAFETY_NET);
 
+    // Carga inicial
     loadProfile();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {

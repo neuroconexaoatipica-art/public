@@ -95,7 +95,6 @@ export function PostCard({ post, onDelete, onPinToggle, currentUserId, canModera
       admin: { bg: 'bg-[#C8102E]/20', text: 'text-[#C8102E]', label: 'Admin' },
       founder: { bg: 'bg-[#81D8D0]/20', text: 'text-[#81D8D0]', label: 'Fundadora' },
       member: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },
-      user_free: { bg: 'bg-white/10', text: 'text-white/60', label: 'Membro' },
     };
 
     const role = post.author_data?.role;

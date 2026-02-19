@@ -7,17 +7,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
-    storage: window.localStorage,
+    detectSessionInUrl: false,    // SPA sem OAuth redirect — evita parse desnecessário
+    storage: window.localStorage,  // Explícito: evita fallback para memória
   },
   global: {
     headers: {
       'x-client-info': 'neuroconexao-atipica/1.0',
     },
+    // Timeout global de 45s — cobre cold start do plano gratuito Supabase
+    // Free tier pode levar 15-30s pra acordar após inatividade
     fetch: (url, options = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
 
+      // Se já tem signal externo, combinar
       if (options.signal) {
         options.signal.addEventListener('abort', () => controller.abort());
       }
@@ -32,20 +35,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Constantes globais de timeout
+// Constantes globais de timeout — fonte única de verdade
 export const TIMEOUTS = {
+  /** Queries de leitura (SELECT) */
   QUERY: 30_000,
+  /** Operações de escrita (INSERT, UPDATE, DELETE) */
   MUTATION: 45_000,
+  /** Carregamento de perfil na inicialização */
   PROFILE: 12_000,
+  /** Upload de arquivos */
   UPLOAD: 30_000,
+  /** Safety net — libera UI mesmo se tudo travar */
   SAFETY_NET: 10_000,
 } as const;
 
 // Chave do localStorage onde o Supabase armazena a sessão
+// Formato: sb-<project-ref>-auth-token
 export const SUPABASE_STORAGE_KEY = 'sb-ieieohtnaymykxiqnmlc-auth-token';
 
 // Tipos TypeScript para o banco de dados
-export type UserRole = 'visitor' | 'user_free' | 'member' | 'founder' | 'admin';
+export type UserRole = 'visitor' | 'member' | 'founder' | 'admin';
 
 export interface User {
   id: string;

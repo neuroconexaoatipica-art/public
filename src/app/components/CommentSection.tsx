@@ -42,7 +42,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
   };
 
   const handleDelete = async (commentId: string) => {
-    if (!confirm("Deletar este comentario?")) return;
+    if (!confirm("Deletar este comentário?")) return;
     await deleteComment(commentId);
   };
 
@@ -56,10 +56,10 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
       const diffDays = Math.floor(diffMs / 86400000);
 
       if (diffMins < 1) return "agora";
-      if (diffMins < 60) return diffMins + "min";
-      if (diffHours < 24) return diffHours + "h";
-      if (diffDays < 7) return diffDays + "d";
-      return Math.floor(diffDays / 7) + "sem";
+      if (diffMins < 60) return `${diffMins}min`;
+      if (diffHours < 24) return `${diffHours}h`;
+      if (diffDays < 7) return `${diffDays}d`;
+      return `${Math.floor(diffDays / 7)}sem`;
     } catch {
       return "";
     }
@@ -76,6 +76,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
 
   return (
     <div className="mt-4 pt-4 border-t border-white/5">
+      {/* Toggle de comentários */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center gap-2 text-white/60 hover:text-white/90 transition-colors mb-3"
@@ -85,8 +86,8 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
           {count === 0
             ? "Comentar"
             : count === 1
-            ? "1 comentario"
-            : count + " comentarios"}
+            ? "1 comentário"
+            : `${count} comentários`}
         </span>
         {count > 0 &&
           (isExpanded ? (
@@ -96,6 +97,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
           ))}
       </button>
 
+      {/* Input de comentário (sempre visível se pode comentar) */}
       {canComment && (
         <form onSubmit={handleSubmit} className="flex items-start gap-3 mb-4">
           <UserAvatar
@@ -108,7 +110,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
               type="text"
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Escreva um comentario..."
+              placeholder="Escreva um comentário..."
               maxLength={1000}
               disabled={isSending}
               className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#81D8D0] focus:border-transparent disabled:opacity-50"
@@ -128,6 +130,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
         </form>
       )}
 
+      {/* Erro */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -141,6 +144,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
         )}
       </AnimatePresence>
 
+      {/* Lista de comentários */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -157,7 +161,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
               </div>
             ) : comments.length === 0 ? (
               <p className="text-sm text-white/40 py-2">
-                Nenhum comentario ainda. Seja o primeiro!
+                Nenhum comentário ainda. Seja o primeiro!
               </p>
             ) : (
               comments.map((comment) => {
@@ -191,15 +195,18 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
                                 ? () => onAuthorClick(comment.author)
                                 : undefined
                             }
-                            className={"text-sm font-semibold text-white hover:text-[#81D8D0] transition-colors" + (onAuthorClick ? " cursor-pointer" : "")}
+                            className={`text-sm font-semibold text-white hover:text-[#81D8D0] transition-colors ${
+                              onAuthorClick ? "cursor-pointer" : ""
+                            }`}
                           >
                             {comment.author_data?.name || "Membro"}
                           </button>
                           {comment.author_data?.role &&
-                            comment.author_data.role !== "member" &&
-                            comment.author_data.role !== "user_free" && (
+                            comment.author_data.role !== "member" && (
                               <span
-                                className={"text-xs font-semibold " + getRoleColor(comment.author_data.role)}
+                                className={`text-xs font-semibold ${getRoleColor(
+                                  comment.author_data.role
+                                )}`}
                               >
                                 {comment.author_data.role === "founder"
                                   ? "Fundadora"
@@ -215,6 +222,7 @@ export function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {
                         </p>
                       </div>
 
+                      {/* Botão deletar */}
                       {canDelete && (
                         <button
                           onClick={() => handleDelete(comment.id)}

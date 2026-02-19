@@ -12,7 +12,6 @@ export { useSeats } from './useSeats';
 export type { CommunityWithMeta } from './CommunitiesContext';
 export { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';
 export type { CommunityConfig } from './communitiesConfig';
-export { hasAppAccess, hasModAccess, getDefaultPage } from './roleEngine';
+export { hasAppAccess, hasModAccess, getDefaultPage, normalizeRole } from './roleEngine';
 export { ProfileProvider, useProfileContext } from './ProfileContext';
 export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
-
