@@ -26,7 +26,6 @@ import { hasAppAccess, ProfileProvider, CommunitiesProvider, useProfileContext }
 import type { CommunityWithMeta } from "../lib";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogoIcon } from "./components/LogoIcon";
-import { SupabaseDiag } from "./components/SupabaseDiag";
 
 type PageType = 'home' | 'ethics' | 'warnings' | 'privacy' | 'terms' | 'index' | 'social-hub' | 'profile' | 'profile-user' | 'feed' | 'communities' | 'community-detail' | 'roadmap';
 
@@ -39,16 +38,12 @@ function AppContent() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageType>('home');
 
-  // Estado para visualização de perfil de outro usuário
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
-  // Estado para visualização de comunidade individual
   const [viewingCommunity, setViewingCommunity] = useState<CommunityWithMeta | null>(null);
 
-  // Roteamento baseado em role — executa quando user muda
   useEffect(() => {
     if (isLoading) return;
 
-    // Checar hash da URL para roteamento direto (ex: #privacy, #terms)
     const hash = window.location.hash.replace('#', '');
     const publicPages: Record<string, PageType> = {
       'privacy': 'privacy',
@@ -72,7 +67,6 @@ function AppContent() {
     }
   }, [currentUser, isLoading]);
 
-  // Escutar mudancas de hash (ex: usuario digitar #privacy na URL)
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
@@ -110,7 +104,6 @@ function AppContent() {
 
   const handleLoginSuccess = async () => {
     setIsLoginOpen(false);
-    // O ProfileProvider detecta SIGNED_IN e recarrega automaticamente
   };
 
   const handleSignupSuccess = () => {
@@ -260,11 +253,9 @@ function AppContent() {
     }
   };
 
-  // Páginas que NÃO mostram header/footer institucional
   const hideHeaderFooterPages = ['index', 'social-hub', 'profile', 'profile-user', 'feed', 'communities', 'community-detail', 'roadmap'];
   const shouldShowHeaderFooter = !hideHeaderFooterPages.includes(currentPage);
 
-  // Loading inicial — só depende de isLoading
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -330,14 +321,13 @@ function AppContent() {
   );
 }
 
-// Componente principal: wraps com Providers (instância ÚNICA de cada)
+// Componente principal
 export default function App() {
   return (
     <ErrorBoundary>
       <ProfileProvider>
         <CommunitiesProvider>
           <AppContent />
-          <SupabaseDiag />
         </CommunitiesProvider>
       </ProfileProvider>
     </ErrorBoundary>

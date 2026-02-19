@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from './supabase';
+import { TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';
 import type { User } from './supabase';
 import { normalizeRole } from './roleEngine';
 
@@ -14,7 +15,7 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
-// Timeout helper — cancela se demorar demais
+// Timeout helper
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promise<T> {
   return Promise.race([
     promise,
@@ -27,7 +28,7 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promis
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const isLoadingRef = useRef(true); // ref para evitar stale closure no timeout
+  const isLoadingRef = useRef(true);
 
   const loadProfile = useCallback(async (userId?: string) => {
     try {
@@ -46,11 +47,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       let { data, error } = await withTimeout(
         supabase.from('users').select('*').eq('id', uid).single(),
-        8000,
+        TIMEOUTS.PROFILE,
         'profile-select'
       );
 
-      // SAFETY NET: registro não existe na tabela users → criar automaticamente
+      // SAFETY NET: registro não existe na tabela users
       if (error && (error as any).code === 'PGRST116') {
         console.warn('Safety net: usuário não encontrado em users, criando registro...');
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -72,7 +73,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
               })
               .select()
               .single(),
-            8000,
+            TIMEOUTS.PROFILE,
             'profile-insert'
           );
 
@@ -91,9 +92,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       // SYNC: preencher whatsapp a partir de user_metadata se vazio
-      // Feito em background — não bloqueia o loading
       if (data && (!data.whatsapp || (Array.isArray(data.whatsapp) && data.whatsapp.length === 0))) {
-        // Fire-and-forget: não esperar por isso
         supabase.auth.getUser().then(({ data: { user: authUser } }) => {
           const metaWa = authUser?.user_metadata?.whatsapp;
           if (metaWa && uid) {
@@ -114,10 +113,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
                 }
               });
           }
-        }).catch(() => { /* ignorar erros de sync */ });
+        }).catch(() => {});
       }
 
-      // Normalizar role
       if (data) {
         data = { ...data, role: normalizeRole(data.role) };
       }
@@ -131,20 +129,43 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ÚNICO listener de auth para toda a aplicação
   useEffect(() => {
     let isMounted = true;
 
-    // Timeout de segurança — 10s para cobrir cold start do Supabase free tier
+    // FAST PATH: visitante sem sessão no localStorage = landing instantânea
+    const hasStoredSession = !!localStorage.getItem(SUPABASE_STORAGE_KEY);
+
+    if (!hasStoredSession) {
+      setUser(null);
+      setIsLoading(false);
+      isLoadingRef.current = false;
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+        if (event === 'SIGNED_IN' && session) {
+          isLoadingRef.current = true;
+          setIsLoading(true);
+          await loadProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    }
+
+    // SLOW PATH: usuário com sessão — carrega perfil com safety net
     const timeout = setTimeout(() => {
       if (isMounted && isLoadingRef.current) {
-        console.warn('Profile: timeout de 10s atingido, liberando UI');
+        console.warn('Profile: timeout de segurança atingido, liberando UI');
         setIsLoading(false);
         isLoadingRef.current = false;
       }
-    }, 10000);
+    }, TIMEOUTS.SAFETY_NET);
 
-    // Carga inicial
     loadProfile();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -172,7 +193,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       const { data, error } = await withTimeout(
         supabase.from('users').update(updates).eq('id', user.id).select().single(),
-        10000,
+        TIMEOUTS.MUTATION,
         'profile-update'
       );
 
@@ -199,7 +220,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           cacheControl: '3600',
           upsert: true
         }),
-        15000,
+        TIMEOUTS.UPLOAD,
         'photo-upload'
       );
 
@@ -211,7 +232,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       const { data, error } = await withTimeout(
         supabase.from('users').update({ profile_photo: publicUrl }).eq('id', user.id).select().single(),
-        10000,
+        TIMEOUTS.MUTATION,
         'photo-update'
       );
 

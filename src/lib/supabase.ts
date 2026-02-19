@@ -7,18 +7,42 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,    // SPA sem OAuth redirect — evita parse desnecessário
-    storage: window.localStorage,  // Explícito: evita fallback para memória
+    detectSessionInUrl: false,
+    storage: window.localStorage,
   },
   global: {
     headers: {
       'x-client-info': 'neuroconexao-atipica/1.0',
+    },
+    fetch: (url, options = {}) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => controller.abort());
+      }
+
+      return fetch(url, { ...options, signal: controller.signal }).finally(() => {
+        clearTimeout(timeout);
+      });
     },
   },
   db: {
     schema: 'public',
   },
 });
+
+// Constantes globais de timeout
+export const TIMEOUTS = {
+  QUERY: 30_000,
+  MUTATION: 45_000,
+  PROFILE: 12_000,
+  UPLOAD: 30_000,
+  SAFETY_NET: 10_000,
+} as const;
+
+// Chave do localStorage onde o Supabase armazena a sessão
+export const SUPABASE_STORAGE_KEY = 'sb-ieieohtnaymykxiqnmlc-auth-token';
 
 // Tipos TypeScript para o banco de dados
 export type UserRole = 'visitor' | 'user_free' | 'member' | 'founder' | 'admin';
