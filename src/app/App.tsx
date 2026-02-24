@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { ProfileProvider } from '../lib/ProfileContext'
 import { CommunitiesProvider } from '../lib/CommunitiesContext'
-import SocialHub from './components/SocialHub'
-import EventsPage from './components/EventsPage'
-import EventDetailPage from './components/EventDetailPage'
+
+import { SocialHub } from './components/SocialHub'
+import { EventsPage } from './components/EventsPage'
+import { EventDetailPage } from './components/EventDetailPage'
 
 type Page =
   | 'home'
