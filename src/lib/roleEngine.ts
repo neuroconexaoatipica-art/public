@@ -1,38 +1,97 @@
-import type { UserRole } from './supabase';
+import type { UserRole } from './supabase'
 
 /**
  * ROLE ENGINE — Autoridade única de roteamento.
- * role é o campo que decide TUDO. access_released não é mais consultado.
- * Roles ativos: visitor, member, founder, admin
- * user_free foi aposentado na migração V7 (member direto).
+ * Modelo estratégico completo.
  */
 
-/** Normaliza o role vindo do banco (case-insensitive, sem espaços) */
-export function normalizeRole(raw: string | null | undefined): UserRole {
-  if (!raw) return 'visitor';
-  const cleaned = raw.trim().toLowerCase();
-  const validRoles: UserRole[] = ['admin', 'founder', 'member', 'visitor'];
-  if (validRoles.includes(cleaned as UserRole)) return cleaned as UserRole;
-  // fallback seguro — role desconhecido = sem acesso
-  console.warn(`[RoleEngine] Role desconhecido: "${raw}" → fallback para 'visitor'`);
-  return 'visitor';
+const VALID_ROLES: UserRole[] = [
+  'visitor',
+  'registered_unfinished',
+  'member_free_legacy',
+  'member_paid',
+  'founder_paid',
+  'moderator',
+  'super_admin'
+]
+
+export function normalizeRole(
+  raw: string | null | undefined
+): UserRole {
+  if (!raw) return 'visitor'
+
+  const cleaned = raw.trim().toLowerCase() as UserRole
+
+  if (VALID_ROLES.includes(cleaned)) {
+    return cleaned
+  }
+
+  console.warn(
+    `[RoleEngine] Role desconhecido: "${raw}" → fallback para 'visitor'`
+  )
+
+  return 'visitor'
 }
 
-/** Acesso ao APP (Social Hub, Feed, Comunidades com postagem) */
-export function hasAppAccess(role: UserRole | undefined | null): boolean {
-  const r = normalizeRole(role);
-  return r === 'member' || r === 'founder' || r === 'admin';
+/**
+ * Acesso ao APP
+ * Pode acessar feed, comunidades, eventos.
+ */
+export function hasAppAccess(
+  role: UserRole | undefined | null
+): boolean {
+  const r = normalizeRole(role)
+
+  return (
+    r === 'member_free_legacy' ||
+    r === 'member_paid' ||
+    r === 'founder_paid' ||
+    r === 'moderator' ||
+    r === 'super_admin'
+  )
 }
 
-/** Acesso de moderação (deletar posts de outros, gerenciar comunidades) */
-export function hasModAccess(role: UserRole | undefined | null): boolean {
-  const r = normalizeRole(role);
-  return r === 'founder' || r === 'admin';
+/**
+ * Acesso de moderação
+ */
+export function hasModAccess(
+  role: UserRole | undefined | null
+): boolean {
+  const r = normalizeRole(role)
+
+  return (
+    r === 'moderator' ||
+    r === 'founder_paid' ||
+    r === 'super_admin'
+  )
 }
 
-/** Página padrão para cada role */
-export function getDefaultPage(role: UserRole | null | undefined): string {
-  const r = normalizeRole(role);
-  if (r === 'member' || r === 'founder' || r === 'admin') return 'social-hub';
-  return 'home';normalizeRole
+/**
+ * Página padrão por role
+ */
+export function getDefaultPage(
+  role: UserRole | null | undefined
+): string {
+  const r = normalizeRole(role)
+
+  if (
+    r === 'member_free_legacy' ||
+    r === 'member_paid' ||
+    r === 'founder_paid' ||
+    r === 'moderator' ||
+    r === 'super_admin'
+  ) {
+    return 'social-hub'
+  }
+
+  return 'home'
+}
+
+/**
+ * Super Admin
+ */
+export function isSuperAdmin(
+  role: UserRole | null | undefined
+): boolean {
+  return normalizeRole(role) === 'super_admin'
 }

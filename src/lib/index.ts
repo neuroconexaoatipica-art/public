@@ -1,6 +1,6 @@
 export { supabase } from './supabase';
 export type { User, Community, Post, LiveInterest, Comment, UserRole } from './supabase';
-// useProfile e useCommunities são LEGADOS — usar useProfileContext e useCommunitiesContext
+// useProfile e useCommunities sao LEGADOS - usar useProfileContext e useCommunitiesContext
 // export { useProfile } from './useProfile';
 // export { useCommunities } from './useCommunities';
 export { usePosts } from './usePosts';
@@ -12,6 +12,9 @@ export { useSeats } from './useSeats';
 export type { CommunityWithMeta } from './CommunitiesContext';
 export { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';
 export type { CommunityConfig } from './communitiesConfig';
-export { hasAppAccess, hasModAccess, getDefaultPage, normalizeRole } from './roleEngine';
+export { hasAppAccess, hasModAccess, getDefaultPage, normalizeRole, isSuperAdmin } from './roleEngine';
 export { ProfileProvider, useProfileContext } from './ProfileContext';
 export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
+export type { Event, EventParticipant, EventType, RitualType, EventStatus, LocationType } from './supabase';
+export { useEvents, useEventDetail } from './useEvents';
+export type { EventWithMeta, CreateEventInput } from './useEvents';
