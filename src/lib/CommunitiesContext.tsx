@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from './supabase';
+import { TIMEOUTS } from './supabase';
 import type { Community } from './supabase';
 import { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME, FALLBACK_ICON } from './communitiesConfig';
 import type { CommunityConfig } from './communitiesConfig';
@@ -33,9 +34,9 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
 
-      // Timeout de 8s para cobrir cold start
+      // Timeout de 20s para cobrir cold start
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout communities')), 8000)
+        setTimeout(() => reject(new Error('Timeout communities')), TIMEOUTS.SAFETY_NET)
       );
 
       const queryPromise = supabase
@@ -54,6 +55,13 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
           is_public: true,
           creator: null,
           created_at: new Date().toISOString(),
+          owner_id: null,
+          manifesto_text: '',
+          needs_moderator: true,
+          ritual_enabled: false,
+          is_featured: false,
+          max_members: 0,
+          requires_approval: false,
           config,
           postCount: 0
         }));
@@ -74,11 +82,11 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
               .eq('community', c.id);
             return { id: c.id, count: count || 0 };
           });
-          // Limite de 5s para contagem — se não conseguir, segue com 0
+          // Limite de 15s para contagem — se não conseguir, segue com 0
           const counts = await Promise.race([
             Promise.all(countPromises),
             new Promise<{ id: string; count: number }[]>((resolve) =>
-              setTimeout(() => resolve([]), 5000)
+              setTimeout(() => resolve([]), 15000)
             ),
           ]);
           counts.forEach((c) => { countMap[c.id] = c.count; });
@@ -118,6 +126,13 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
               is_public: true,
               creator: null,
               created_at: new Date().toISOString(),
+              owner_id: null,
+              manifesto_text: '',
+              needs_moderator: true,
+              ritual_enabled: false,
+              is_featured: false,
+              max_members: 0,
+              requires_approval: false,
               config,
               postCount: 0
             });
@@ -132,6 +147,13 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
             is_public: true,
             creator: null,
             created_at: new Date().toISOString(),
+            owner_id: null,
+            manifesto_text: '',
+            needs_moderator: true,
+            ritual_enabled: false,
+            is_featured: false,
+            max_members: 0,
+            requires_approval: false,
             config,
             postCount: 0
           });
@@ -148,6 +170,13 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
         is_public: true,
         creator: null,
         created_at: new Date().toISOString(),
+        owner_id: null,
+        manifesto_text: '',
+        needs_moderator: true,
+        ritual_enabled: false,
+        is_featured: false,
+        max_members: 0,
+        requires_approval: false,
         config,
         postCount: 0
       }));

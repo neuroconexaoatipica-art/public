@@ -1,6 +1,7 @@
-export { supabase } from './supabase';
+export { supabase, TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';
 export type { User, Community, Post, LiveInterest, Comment, UserRole } from './supabase';
-// useProfile e useCommunities sao LEGADOS - usar useProfileContext e useCommunitiesContext
+export type { Event, EventParticipant, EventType, RitualType, EventStatus, LocationType, ParticipantStatus } from './supabase';
+// useProfile e useCommunities são LEGADOS — usar useProfileContext e useCommunitiesContext
 // export { useProfile } from './useProfile';
 // export { useCommunities } from './useCommunities';
 export { usePosts } from './usePosts';
@@ -12,9 +13,10 @@ export { useSeats } from './useSeats';
 export type { CommunityWithMeta } from './CommunitiesContext';
 export { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';
 export type { CommunityConfig } from './communitiesConfig';
-export { hasAppAccess, hasModAccess, getDefaultPage, normalizeRole, isSuperAdmin } from './roleEngine';
+export { hasAppAccess, hasModAccess, hasLeadershipAccess, isSuperAdmin, needsLeadershipOnboarding, getDefaultPage, normalizeRole } from './roleEngine';
 export { ProfileProvider, useProfileContext } from './ProfileContext';
 export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
-export type { Event, EventParticipant, EventType, RitualType, EventStatus, LocationType } from './supabase';
-export { useEvents, useEventDetail } from './useEvents';
+export { usePlatformCopy, useHomeSections, useLegalPage, useLegalPages, useAnnouncements } from './useCMS';
+export type { PlatformCopy, HomeSection, LegalPage, LegalPageKey, Announcement } from './useCMS';
+export { useEvents, useEventDetail, EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS, RITUAL_TYPE_DESCRIPTIONS, EVENT_STATUS_LABELS, LOCATION_TYPE_LABELS } from './useEvents';
 export type { EventWithMeta, CreateEventInput } from './useEvents';

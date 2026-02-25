@@ -62,9 +62,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
               .insert({
                 id: uid,
                 name: authUser.user_metadata?.name || 'Novo Membro',
-                role: 'member',
+                role: 'member_free_legacy',
+                is_beta_lifetime_flag: true,
                 access_released: true,
-                onboarding_done: false,
+                onboarding_done: true,
+                leadership_onboarding_done: false,
+                age_verified: false,
                 whatsapp: authUser.user_metadata?.whatsapp
                   ? [authUser.user_metadata.whatsapp]
                   : null,

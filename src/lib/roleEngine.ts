@@ -1,97 +1,57 @@
-import type { UserRole } from './supabase'
+import type { UserRole } from './supabase';
 
-/**
- * ROLE ENGINE — Autoridade única de roteamento.
- * Modelo estratégico completo.
- */
+const LEGACY_ROLE_MAP: Record<string, UserRole> = {
+  'member': 'member_free_legacy',
+  'founder': 'founder_paid',
+  'admin': 'super_admin',
+  'user_free': 'member_free_legacy',
+};
 
 const VALID_ROLES: UserRole[] = [
-  'visitor',
-  'registered_unfinished',
-  'member_free_legacy',
-  'member_paid',
-  'founder_paid',
-  'moderator',
-  'super_admin'
-]
+  'visitor', 'member_free_legacy', 'member_paid',
+  'founder_paid', 'moderator', 'super_admin',
+];
 
-export function normalizeRole(
-  raw: string | null | undefined
-): UserRole {
-  if (!raw) return 'visitor'
-
-  const cleaned = raw.trim().toLowerCase() as UserRole
-
-  if (VALID_ROLES.includes(cleaned)) {
-    return cleaned
-  }
-
-  console.warn(
-    `[RoleEngine] Role desconhecido: "${raw}" → fallback para 'visitor'`
-  )
-
-  return 'visitor'
+export function normalizeRole(raw: string | null | undefined): UserRole {
+  if (!raw) return 'visitor';
+  const cleaned = raw.trim().toLowerCase();
+  if (VALID_ROLES.includes(cleaned as UserRole)) return cleaned as UserRole;
+  const mapped = LEGACY_ROLE_MAP[cleaned];
+  if (mapped) return mapped;
+  console.warn(`[RoleEngine] Role desconhecido: "${raw}" -> fallback para 'visitor'`);
+  return 'visitor';
 }
 
-/**
- * Acesso ao APP
- * Pode acessar feed, comunidades, eventos.
- */
-export function hasAppAccess(
-  role: UserRole | undefined | null
-): boolean {
-  const r = normalizeRole(role)
-
-  return (
-    r === 'member_free_legacy' ||
-    r === 'member_paid' ||
-    r === 'founder_paid' ||
-    r === 'moderator' ||
-    r === 'super_admin'
-  )
+export function hasAppAccess(role: UserRole | undefined | null): boolean {
+  return normalizeRole(role) !== 'visitor';
 }
 
-/**
- * Acesso de moderação
- */
-export function hasModAccess(
-  role: UserRole | undefined | null
-): boolean {
-  const r = normalizeRole(role)
-
-  return (
-    r === 'moderator' ||
-    r === 'founder_paid' ||
-    r === 'super_admin'
-  )
+export function hasLeadershipAccess(role: UserRole | undefined | null, leadershipOnboardingDone?: boolean): boolean {
+  const r = normalizeRole(role);
+  if (r === 'super_admin') return true;
+  if (r === 'founder_paid' || r === 'moderator') return leadershipOnboardingDone === true;
+  return false;
 }
 
-/**
- * Página padrão por role
- */
-export function getDefaultPage(
-  role: UserRole | null | undefined
-): string {
-  const r = normalizeRole(role)
-
-  if (
-    r === 'member_free_legacy' ||
-    r === 'member_paid' ||
-    r === 'founder_paid' ||
-    r === 'moderator' ||
-    r === 'super_admin'
-  ) {
-    return 'social-hub'
-  }
-
-  return 'home'
+export function hasModAccess(role: UserRole | undefined | null): boolean {
+  const r = normalizeRole(role);
+  return r === 'founder_paid' || r === 'moderator' || r === 'super_admin';
 }
 
-/**
- * Super Admin
- */
-export function isSuperAdmin(
-  role: UserRole | null | undefined
-): boolean {
-  return normalizeRole(role) === 'super_admin'
+export function isSuperAdmin(role: UserRole | undefined | null): boolean {
+  return normalizeRole(role) === 'super_admin';
+}
+
+export function needsLeadershipOnboarding(role: UserRole | undefined | null, leadershipOnboardingDone?: boolean): boolean {
+  const r = normalizeRole(role);
+  if (r === 'founder_paid' || r === 'moderator') return leadershipOnboardingDone !== true;
+  return false;
+}
+
+export function getDefaultPage(role: UserRole | null | undefined): string {
+  const r = normalizeRole(role);
+  if (r === 'super_admin') return 'social-hub';
+  if (r === 'member_free_legacy' || r === 'member_paid') return 'social-hub';
+  if (r === 'founder_paid' || r === 'moderator') return 'social-hub';
+  return 'home';
 }

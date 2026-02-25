@@ -1,3 +1,7 @@
-/* Tipografia Oficial NeuroConexão Atípica */
+/* Tipografia Oficial NeuroConexao Atipica */
+
+/* Inter - Tipografia Primaria (Interface) */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* Lora - Tipografia Secundaria (Manifesto e Textos Longos) */
 @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
