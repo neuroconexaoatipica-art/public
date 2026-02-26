@@ -6,7 +6,10 @@ import type { CommunityConfig } from './communitiesConfig';
 
 const NAME_ALIASES: Record<string, string> = { 'Zona de Intensidade': 'Mentes em Tensao' };
 
-export interface CommunityWithMeta extends Community { config: CommunityConfig; postCount: number; }
+export interface CommunityWithMeta extends Community {
+  config: CommunityConfig;
+  postCount: number;
+}
 
 export function useCommunities() {
   const [communities, setCommunities] = useState<CommunityWithMeta[]>([]);
@@ -17,11 +20,19 @@ export function useCommunities() {
       setIsLoading(true);
       const { data: dbCommunities, error } = await supabase.from('communities').select('*').order('name');
       if (error) {
-        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({ id: `local-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
-        setCommunities(fallback); return;
+        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
+          id: `local-${i}`, name: config.name, description: config.description, is_public: true,
+          creator: null, created_at: new Date().toISOString(), config, postCount: 0
+        }));
+        setCommunities(fallback as any);
+        return;
       }
       let countMap: Record<string, number> = {};
-      try { const { data: postCounts } = await supabase.from('posts').select('community').not('community', 'is', null); if (postCounts) postCounts.forEach((p: { community: string | null }) => { if (p.community) countMap[p.community] = (countMap[p.community] || 0) + 1; }); } catch {}
+      try {
+        const { data: postCounts } = await supabase.from('posts').select('community').not('community', 'is', null);
+        if (postCounts) postCounts.forEach((p: { community: string | null }) => { if (p.community) countMap[p.community] = (countMap[p.community] || 0) + 1; });
+      } catch {}
+
       const merged: CommunityWithMeta[] = [];
       if (dbCommunities && dbCommunities.length > 0) {
         dbCommunities.forEach((dbComm: Community) => {
@@ -31,19 +42,31 @@ export function useCommunities() {
         });
         const dbNames = new Set(dbCommunities.map((c: Community) => c.name));
         const dbResolvedNames = new Set(dbCommunities.map((c: Community) => NAME_ALIASES[c.name] || c.name));
-        COMMUNITIES_CONFIG.forEach((config, i) => { if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }); });
+        COMMUNITIES_CONFIG.forEach((config, i) => {
+          if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) {
+            merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), config, postCount: 0 } as any);
+          }
+        });
       } else {
-        COMMUNITIES_CONFIG.forEach((config, i) => merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
+        COMMUNITIES_CONFIG.forEach((config, i) => {
+          merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), config, postCount: 0 } as any);
+        });
       }
       setCommunities(merged);
     } catch (err) {
-      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({ id: `local-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
-      setCommunities(fallback);
+      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
+        id: `local-${i}`, name: config.name, description: config.description, is_public: true,
+        creator: null, created_at: new Date().toISOString(), config, postCount: 0
+      }));
+      setCommunities(fallback as any);
     } finally { setIsLoading(false); }
   };
 
   useEffect(() => { loadCommunities(); }, []);
-  const getCommunityById = (id: string) => communities.find(c => c.id === id);
-  const getCommunityByName = (name: string) => communities.find(c => c.name === name);
-  return { communities, isLoading, refreshCommunities: loadCommunities, getCommunityById, getCommunityByName };
+
+  return {
+    communities, isLoading, refreshCommunities: loadCommunities,
+    getCommunityById: (id: string) => communities.find(c => c.id === id),
+    getCommunityByName: (name: string) => communities.find(c => c.name === name),
+  };
 }

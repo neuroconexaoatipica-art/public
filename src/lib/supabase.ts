@@ -14,12 +14,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     headers: {
       'x-client-info': 'neuroconexao-atipica/1.0',
     },
-    fetch: (url, options = {}) => {
+    fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
+
       if (options.signal) {
         options.signal.addEventListener('abort', () => controller.abort());
       }
+
       return fetch(url, { ...options, signal: controller.signal }).finally(() => {
         clearTimeout(timeout);
       });
@@ -68,6 +70,13 @@ export interface User {
   age_verified: boolean;
   subscription_status: 'none' | 'active' | 'cancelled' | 'past_due';
   subscription_expires_at: string | null;
+  display_name: string;
+  legal_name: string | null;
+  use_real_name: boolean;
+  is_anonymous_mode: boolean;
+  deep_statement: string | null;
+  deep_statement_public: boolean;
+  last_active_at: string | null;
 }
 
 export interface Community {

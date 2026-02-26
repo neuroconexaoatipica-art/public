@@ -18,8 +18,7 @@ export function usePlatformCopy(context?: 'landing' | 'app' | 'both' | 'admin') 
         const map: Record<string, string> = {};
         data?.forEach((row: { copy_key: string; copy_value: string }) => { map[row.copy_key] = row.copy_value; });
         setCopies(map);
-      } catch (err) { console.error('[usePlatformCopy] Erro:', err); }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (err) { console.error('[usePlatformCopy] Erro:', err); } finally { if (!cancelled) setIsLoading(false); }
     }
     load();
     return () => { cancelled = true; };
@@ -40,8 +39,7 @@ export function useHomeSections() {
         const { data, error } = await supabase.from('home_sections').select('*').eq('is_active', true).order('display_order', { ascending: true });
         if (error) throw error;
         if (!cancelled) setSections(data ?? []);
-      } catch (err) { console.error('[useHomeSections] Erro:', err); }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (err) { console.error('[useHomeSections] Erro:', err); } finally { if (!cancelled) setIsLoading(false); }
     }
     load();
     return () => { cancelled = true; };
@@ -64,8 +62,9 @@ export function useLegalPage(pageKey: LegalPageKey) {
         const { data, error: err } = await supabase.from('legal_pages').select('*').eq('page_key', pageKey).eq('is_active', true).single();
         if (err) throw err;
         if (!cancelled) setPage(data);
-      } catch (err: unknown) { if (!cancelled) setError(err instanceof Error ? err.message : 'Erro'); }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Erro ao carregar pagina');
+      } finally { if (!cancelled) setIsLoading(false); }
     }
     load();
     return () => { cancelled = true; };
@@ -83,8 +82,7 @@ export function useLegalPages() {
         const { data, error } = await supabase.from('legal_pages').select('id, page_key, title, version, is_active, updated_at').eq('is_active', true).order('title');
         if (error) throw error;
         if (!cancelled) setPages((data ?? []) as LegalPage[]);
-      } catch (err) { console.error('[useLegalPages] Erro:', err); }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (err) { console.error('[useLegalPages] Erro:', err); } finally { if (!cancelled) setIsLoading(false); }
     }
     load();
     return () => { cancelled = true; };
@@ -105,8 +103,7 @@ export function useAnnouncements() {
         const { data, error } = await supabase.from('home_announcements').select('*').eq('is_active', true).lte('starts_at', now).or(`ends_at.is.null,ends_at.gte.${now}`).order('starts_at', { ascending: false });
         if (error) throw error;
         if (!cancelled) setAnnouncements(data ?? []);
-      } catch (err) { console.error('[useAnnouncements] Erro:', err); }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (err) { console.error('[useAnnouncements] Erro:', err); } finally { if (!cancelled) setIsLoading(false); }
     }
     load();
     return () => { cancelled = true; };

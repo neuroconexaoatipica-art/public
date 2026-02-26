@@ -32,18 +32,20 @@ export function useProfile() {
   const updateProfile = async (updates: Partial<User>) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('Nao autenticado');
+      if (!session?.user) throw new Error('Usuario nao autenticado');
       const { data, error } = await supabase.from('users').update(updates).eq('id', session.user.id).select().single();
       if (error) throw error;
       setUser(data);
       return { success: true, data };
-    } catch (error: any) { return { success: false, error: error.message }; }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   };
 
   const uploadPhoto = async (file: File) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('Nao autenticado');
+      if (!session?.user) throw new Error('Usuario nao autenticado');
       const fileExt = file.name.split('.').pop();
       const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
       const filePath = `profile-photos/${fileName}`;
@@ -52,7 +54,9 @@ export function useProfile() {
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       await updateProfile({ profile_photo: publicUrl });
       return { success: true, url: publicUrl };
-    } catch (error: any) { return { success: false, error: error.message }; }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   };
 
   return { user, isLoading, updateProfile, uploadPhoto, refreshProfile: loadProfile };

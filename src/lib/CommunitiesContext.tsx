@@ -6,9 +6,14 @@ import type { Community } from './supabase';
 import { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME, FALLBACK_ICON } from './communitiesConfig';
 import type { CommunityConfig } from './communitiesConfig';
 
-const NAME_ALIASES: Record<string, string> = { 'Zona de Intensidade': 'Mentes em Tensao' };
+const NAME_ALIASES: Record<string, string> = {
+  'Zona de Intensidade': 'Mentes em Tensao',
+};
 
-export interface CommunityWithMeta extends Community { config: CommunityConfig; postCount: number; }
+export interface CommunityWithMeta extends Community {
+  config: CommunityConfig;
+  postCount: number;
+}
 
 interface CommunitiesContextValue {
   communities: CommunityWithMeta[];
@@ -27,13 +32,22 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
   const loadCommunities = useCallback(async () => {
     try {
       setIsLoading(true);
-      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout communities')), TIMEOUTS.SAFETY_NET));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout communities')), TIMEOUTS.SAFETY_NET)
+      );
       const queryPromise = supabase.from('communities').select('*').order('name');
       const { data: dbCommunities, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
       if (error) {
-        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({ id: `local-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
-        setCommunities(fallback); return;
+        console.error('Erro ao buscar comunidades:', error);
+        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
+          id: `local-${i}`, name: config.name, description: config.description, is_public: true,
+          creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '',
+          needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0,
+          requires_approval: false, config, postCount: 0
+        }));
+        setCommunities(fallback);
+        return;
       }
 
       let countMap: Record<string, number> = {};
@@ -43,31 +57,61 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
             const { count } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('community', c.id);
             return { id: c.id, count: count || 0 };
           });
-          const counts = await Promise.race([Promise.all(countPromises), new Promise<{ id: string; count: number }[]>((resolve) => setTimeout(() => resolve([]), 15000))]);
+          const counts = await Promise.race([
+            Promise.all(countPromises),
+            new Promise<{ id: string; count: number }[]>((resolve) => setTimeout(() => resolve([]), 15000)),
+          ]);
           counts.forEach((c) => { countMap[c.id] = c.count; });
-        } catch {}
+        } catch { /* count falhou */ }
       }
 
       const merged: CommunityWithMeta[] = [];
+
       if (dbCommunities && dbCommunities.length > 0) {
         dbCommunities.forEach((dbComm: Community) => {
           const resolvedName = NAME_ALIASES[dbComm.name] || dbComm.name;
-          const config = COMMUNITY_BY_NAME[resolvedName] || COMMUNITY_BY_NAME[dbComm.name] || { name: dbComm.name, description: dbComm.description, icon: FALLBACK_ICON, color: '#81D8D0', category: 'core' as const };
+          const config = COMMUNITY_BY_NAME[resolvedName] || COMMUNITY_BY_NAME[dbComm.name] || {
+            name: dbComm.name, description: dbComm.description, icon: FALLBACK_ICON, color: '#81D8D0', category: 'core' as const
+          };
           merged.push({ ...dbComm, name: resolvedName, config, postCount: countMap[dbComm.id] || 0 });
         });
+
         const dbNames = new Set(dbCommunities.map((c: Community) => c.name));
         const dbResolvedNames = new Set(dbCommunities.map((c: Community) => NAME_ALIASES[c.name] || c.name));
         COMMUNITIES_CONFIG.forEach((config, i) => {
-          if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 });
+          if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) {
+            merged.push({
+              id: `pending-${i}`, name: config.name, description: config.description, is_public: true,
+              creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '',
+              needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0,
+              requires_approval: false, config, postCount: 0
+            });
+          }
         });
       } else {
-        COMMUNITIES_CONFIG.forEach((config, i) => merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
+        COMMUNITIES_CONFIG.forEach((config, i) => {
+          merged.push({
+            id: `pending-${i}`, name: config.name, description: config.description, is_public: true,
+            creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '',
+            needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0,
+            requires_approval: false, config, postCount: 0
+          });
+        });
       }
+
       setCommunities(merged);
     } catch (err) {
-      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({ id: `local-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '', needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0, requires_approval: false, config, postCount: 0 }));
+      console.error('Erro ao carregar comunidades:', err);
+      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
+        id: `local-${i}`, name: config.name, description: config.description, is_public: true,
+        creator: null, created_at: new Date().toISOString(), owner_id: null, manifesto_text: '',
+        needs_moderator: true, ritual_enabled: false, is_featured: false, max_members: 0,
+        requires_approval: false, config, postCount: 0
+      }));
       setCommunities(fallback);
-    } finally { setIsLoading(false); }
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadCommunities(); }, [loadCommunities]);
@@ -76,7 +120,9 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
   const getCommunityByName = useCallback((name: string) => communities.find(c => c.name === name), [communities]);
 
   return (
-    <CommunitiesContext.Provider value={{ communities, isLoading, refreshCommunities: loadCommunities, getCommunityById, getCommunityByName }}>
+    <CommunitiesContext.Provider value={{
+      communities, isLoading, refreshCommunities: loadCommunities, getCommunityById, getCommunityByName
+    }}>
       {children}
     </CommunitiesContext.Provider>
   );
@@ -84,6 +130,8 @@ export function CommunitiesProvider({ children }: { children: ReactNode }) {
 
 export function useCommunitiesContext(): CommunitiesContextValue {
   const ctx = useContext(CommunitiesContext);
-  if (!ctx) throw new Error('useCommunitiesContext deve ser usado dentro de <CommunitiesProvider>');
+  if (!ctx) {
+    throw new Error('useCommunitiesContext deve ser usado dentro de <CommunitiesProvider>');
+  }
   return ctx;
 }

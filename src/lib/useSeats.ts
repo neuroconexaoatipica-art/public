@@ -14,9 +14,7 @@ export function useSeats() {
       if (!error && data !== null) setSeatsUsed(data);
     } catch (err) {
       console.error('Erro ao contar vagas:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   }, []);
 
   useEffect(() => { loadSeats(); }, [loadSeats]);
@@ -25,14 +23,8 @@ export function useSeats() {
   const realRemaining = Math.max(0, REAL_MAX - seatsUsed);
 
   return {
-    seatsUsed,
-    seatsTotal: PUBLIC_SEATS,
-    seatsRemaining: publicRemaining,
-    isFull: publicRemaining <= 0,
-    isReallyFull: realRemaining <= 0,
-    isLoading,
-    refreshSeats: loadSeats,
-    realMax: REAL_MAX,
-    realRemaining,
+    seatsUsed, seatsTotal: PUBLIC_SEATS, seatsRemaining: publicRemaining,
+    isFull: publicRemaining <= 0, isReallyFull: realRemaining <= 0, isLoading,
+    refreshSeats: loadSeats, realMax: REAL_MAX, realRemaining,
   };
 }

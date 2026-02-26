@@ -22,7 +22,7 @@ export function useComments(postId: string) {
           const authorIds = [...new Set(fallbackData.map(c => c.author))];
           let authorsMap: Record<string, any> = {};
           if (authorIds.length > 0) {
-            const { data: authors } = await supabase.from('users').select('id, name, profile_photo, role').in('id', authorIds);
+            const { data: authors } = await supabase.from('users').select('id,name,profile_photo,role').in('id', authorIds);
             if (authors) authors.forEach((a: any) => { authorsMap[a.id] = a; });
           }
           const commentsWithAuthors = fallbackData.map(comment => ({ ...comment, author_data: authorsMap[comment.author] || { id: comment.author, name: 'Membro', profile_photo: null, role: 'member' as const } }));
@@ -33,8 +33,9 @@ export function useComments(postId: string) {
       }
       setComments((data as CommentWithAuthor[]) || []);
       setCount(data?.length || 0);
-    } catch (err) { console.error('Erro ao carregar comentarios:', err); }
-    finally { setIsLoading(false); }
+    } catch (err) {
+      console.error('Erro ao carregar comentarios:', err);
+    } finally { setIsLoading(false); }
   }, [postId]);
 
   useEffect(() => { loadComments(); }, [loadComments]);

@@ -1,28 +1,18 @@
 import { useState } from 'react';
 import { supabase } from './supabase';
 
-interface UploadResult {
-  success: boolean;
-  url?: string;
-  error?: string;
-}
+interface UploadResult { success: boolean; url?: string; error?: string; }
 
 export function useImageUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const uploadImage = async (
-    file: File,
-    bucket: 'avatars' | 'post-images' = 'avatars',
-    folder?: string
-  ): Promise<UploadResult> => {
+  const uploadImage = async (file: File, bucket: 'avatars' | 'post-images' = 'avatars', folder?: string): Promise<UploadResult> => {
     try {
-      setIsUploading(true);
-      setProgress(0);
-      const maxSize = 5 * 1024 * 1024;
-      if (file.size > maxSize) return { success: false, error: 'Imagem muito grande. Maximo 5MB.' };
+      setIsUploading(true); setProgress(0);
+      if (file.size > 5 * 1024 * 1024) return { success: false, error: 'Imagem muito grande. Maximo 5MB.' };
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-      if (!allowedTypes.includes(file.type)) return { success: false, error: 'Tipo de arquivo nao suportado.' };
+      if (!allowedTypes.includes(file.type)) return { success: false, error: 'Tipo nao suportado. Use JPG, PNG, WebP ou GIF.' };
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return { success: false, error: 'Voce precisa estar logado.' };
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
@@ -37,10 +27,7 @@ export function useImageUpload() {
       return { success: true, url: publicUrl };
     } catch (error: any) {
       return { success: false, error: error.message || 'Erro ao fazer upload.' };
-    } finally {
-      setIsUploading(false);
-      setTimeout(() => setProgress(0), 500);
-    }
+    } finally { setIsUploading(false); setTimeout(() => setProgress(0), 500); }
   };
 
   const deleteImage = async (url: string, bucket: 'avatars' | 'post-images' = 'avatars'): Promise<boolean> => {

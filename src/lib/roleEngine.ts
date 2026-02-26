@@ -8,8 +8,12 @@ const LEGACY_ROLE_MAP: Record<string, UserRole> = {
 };
 
 const VALID_ROLES: UserRole[] = [
-  'visitor', 'member_free_legacy', 'member_paid',
-  'founder_paid', 'moderator', 'super_admin',
+  'visitor',
+  'member_free_legacy',
+  'member_paid',
+  'founder_paid',
+  'moderator',
+  'super_admin',
 ];
 
 export function normalizeRole(raw: string | null | undefined): UserRole {
@@ -17,19 +21,28 @@ export function normalizeRole(raw: string | null | undefined): UserRole {
   const cleaned = raw.trim().toLowerCase();
   if (VALID_ROLES.includes(cleaned as UserRole)) return cleaned as UserRole;
   const mapped = LEGACY_ROLE_MAP[cleaned];
-  if (mapped) return mapped;
+  if (mapped) {
+    console.info(`[RoleEngine] Role legado "${raw}" -> mapeado para "${mapped}"`);
+    return mapped;
+  }
   console.warn(`[RoleEngine] Role desconhecido: "${raw}" -> fallback para 'visitor'`);
   return 'visitor';
 }
 
 export function hasAppAccess(role: UserRole | undefined | null): boolean {
-  return normalizeRole(role) !== 'visitor';
+  const r = normalizeRole(role);
+  return r !== 'visitor';
 }
 
-export function hasLeadershipAccess(role: UserRole | undefined | null, leadershipOnboardingDone?: boolean): boolean {
+export function hasLeadershipAccess(
+  role: UserRole | undefined | null,
+  leadershipOnboardingDone?: boolean
+): boolean {
   const r = normalizeRole(role);
   if (r === 'super_admin') return true;
-  if (r === 'founder_paid' || r === 'moderator') return leadershipOnboardingDone === true;
+  if (r === 'founder_paid' || r === 'moderator') {
+    return leadershipOnboardingDone === true;
+  }
   return false;
 }
 
@@ -42,9 +55,14 @@ export function isSuperAdmin(role: UserRole | undefined | null): boolean {
   return normalizeRole(role) === 'super_admin';
 }
 
-export function needsLeadershipOnboarding(role: UserRole | undefined | null, leadershipOnboardingDone?: boolean): boolean {
+export function needsLeadershipOnboarding(
+  role: UserRole | undefined | null,
+  leadershipOnboardingDone?: boolean
+): boolean {
   const r = normalizeRole(role);
-  if (r === 'founder_paid' || r === 'moderator') return leadershipOnboardingDone !== true;
+  if (r === 'founder_paid' || r === 'moderator') {
+    return leadershipOnboardingDone !== true;
+  }
   return false;
 }
 
