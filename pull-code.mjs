@@ -1,3 +1,4 @@
+import "dotenv/config";
 // pull-code.mjs — Ponte Supabase: puxa arquivos de code_deploy
 import { createClient } from "@supabase/supabase-js";
 import { writeFileSync, mkdirSync } from "fs";
