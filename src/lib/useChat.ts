@@ -1,61 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from './supabase';
-import type { User } from './supabase';
-
-export interface ChatMessage { id: string; community_id: string; author_id: string; content: string; reply_to: string | null; is_deleted: boolean; created_at: string; author_data?: Pick<User, 'id' | 'name' | 'profile_photo' | 'role'>; }
-
-export function useChat(communityId: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  const loadMessages = useCallback(async () => {
-    if (!communityId) { setIsLoading(false); return; }
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase.from('community_messages').select('*').eq('community_id', communityId).eq('is_deleted', false).order('created_at', { ascending: true }).limit(100);
-      if (error) throw error;
-      const authorIds = [...new Set((data || []).map((m: any) => m.author_id))];
-      let authorsMap: Record<string, any> = {};
-      if (authorIds.length > 0) {
-        const { data: authors } = await supabase.from('users').select('id,name,profile_photo,role').in('id', authorIds);
-        (authors || []).forEach((a: any) => { authorsMap[a.id] = a; });
-      }
-      const enriched = (data || []).map((m: any) => ({ ...m, author_data: authorsMap[m.author_id] || { id: m.author_id, name: 'Membro', profile_photo: null, role: 'member' } }));
-      setMessages(enriched);
-    } catch (err) { console.error('[useChat] Erro:', err); } finally { setIsLoading(false); }
-  }, [communityId]);
-
-  useEffect(() => {
-    loadMessages();
-    if (!communityId) return;
-    const channel = supabase.channel(`chat-${communityId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_messages', filter: `community_id=eq.${communityId}` }, async (payload: any) => {
-      const newMsg = payload.new as unknown as ChatMessage;
-      const { data: author } = await supabase.from('users').select('id,name,profile_photo,role').eq('id', newMsg.author_id).single();
-      setMessages(prev => [...prev, { ...newMsg, author_data: author || { id: newMsg.author_id, name: 'Membro', profile_photo: null, role: 'member' } }]);
-    }).subscribe();
-    channelRef.current = channel;
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  }, [communityId, loadMessages]);
-
-  const sendMessage = useCallback(async (content: string, replyTo?: string) => {
-    if (!communityId) return { success: false, error: 'Sem comunidade' };
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { success: false, error: 'Nao autenticado' };
-      const { error } = await supabase.from('community_messages').insert({ community_id: communityId, author_id: user.id, content: content.trim(), reply_to: replyTo || null });
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
-  }, [communityId]);
-
-  const deleteMessage = useCallback(async (messageId: string) => {
-    try {
-      await supabase.from('community_messages').update({ is_deleted: true }).eq('id', messageId);
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
-  }, []);
-
-  return { messages, isLoading, sendMessage, deleteMessage, refresh: loadMessages };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useChat.ts",
+  "created_at": "2026-02-27T05:36:03.679Z",
+  "file_content": "import { useState, useEffect, useCallback, useRef } from 'react';\nimport { supabase } from './supabase';\nimport type { User } from './supabase';\n\nexport interface ChatMessage {\n  id: string;\n  community_id: string;\n  author_id: string;\n  content: string;\n  reply_to: string | null;\n  is_deleted: boolean;\n  created_at: string;\n  author_data?: Pick<User, 'id' | 'name' | 'display_name' | 'profile_photo' | 'role'>;\n}\n\nexport function useChat(communityId: string | null) {\n  const [messages, setMessages] = useState<ChatMessage[]>([]);\n  const [isLoading, setIsLoading] = useState(true);\n  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);\n\n  const loadMessages = useCallback(async () => {\n    if (!communityId) { setIsLoading(false); return; }\n    try {\n      setIsLoading(true);\n      const { data, error } = await supabase\n        .from('community_messages')\n        .select('*')\n        .eq('community_id', communityId)\n        .eq('is_deleted', false)\n        .order('created_at', { ascending: true })\n        .limit(100);\n\n      if (error) throw error;\n\n      // Enriquecer com dados do autor\n      const authorIds = [...new Set((data || []).map(m => m.author_id))];\n      let authorsMap: Record<string, any> = {};\n      if (authorIds.length > 0) {\n        const { data: authors } = await supabase\n          .from('users').select('id, name, display_name, profile_photo, role').in('id', authorIds);\n        (authors || []).forEach(a => { authorsMap[a.id] = a; });\n      }\n\n      const enriched = (data || []).map(m => ({\n        ...m,\n        author_data: authorsMap[m.author_id] || { id: m.author_id, name: 'Membro', profile_photo: null, role: 'member' }\n      }));\n\n      setMessages(enriched);\n    } catch (err) {\n      console.error('[useChat] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, [communityId]);\n\n  // Realtime\n  useEffect(() => {\n    loadMessages();\n\n    if (!communityId) return;\n\n    const channel = supabase\n      .channel(`chat-${communityId}`)\n      .on('postgres_changes', {\n        event: 'INSERT',\n        schema: 'public',\n        table: 'community_messages',\n        filter: `community_id=eq.${communityId}`,\n      }, async (payload) => {\n        const newMsg = payload.new as ChatMessage;\n        // Buscar autor\n        const { data: author } = await supabase\n          .from('users').select('id, name, display_name, profile_photo, role').eq('id', newMsg.author_id).single();\n        setMessages(prev => [...prev, { ...newMsg, author_data: author || { id: newMsg.author_id, name: 'Membro', profile_photo: null, role: 'member' } }]);\n      })\n      .subscribe();\n\n    channelRef.current = channel;\n\n    return () => {\n      if (channelRef.current) supabase.removeChannel(channelRef.current);\n    };\n  }, [communityId, loadMessages]);\n\n  const sendMessage = useCallback(async (content: string, replyTo?: string) => {\n    if (!communityId) return { success: false, error: 'Sem comunidade' };\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const { error } = await supabase.from('community_messages').insert({\n        community_id: communityId,\n        author_id: user.id,\n        content: content.trim(),\n        reply_to: replyTo || null,\n      });\n\n      if (error) throw error;\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message };\n    }\n  }, [communityId]);\n\n  const deleteMessage = useCallback(async (messageId: string) => {\n    try {\n      await supabase.from('community_messages').update({ is_deleted: true }).eq('id', messageId);\n      setMessages(prev => prev.filter(m => m.id !== messageId));\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message };\n    }\n  }, []);\n\n  return { messages, isLoading, sendMessage, deleteMessage, refresh: loadMessages };\n}"
 }

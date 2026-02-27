@@ -1,72 +1,7 @@
-import { useState, useEffect } from 'react';
-import { supabase } from './supabase';
-import type { Community } from './supabase';
-import { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME, FALLBACK_ICON } from './communitiesConfig';
-import type { CommunityConfig } from './communitiesConfig';
-
-const NAME_ALIASES: Record<string, string> = { 'Zona de Intensidade': 'Mentes em Tensao' };
-
-export interface CommunityWithMeta extends Community {
-  config: CommunityConfig;
-  postCount: number;
-}
-
-export function useCommunities() {
-  const [communities, setCommunities] = useState<CommunityWithMeta[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadCommunities = async () => {
-    try {
-      setIsLoading(true);
-      const { data: dbCommunities, error } = await supabase.from('communities').select('*').order('name');
-      if (error) {
-        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
-          id: `local-${i}`, name: config.name, description: config.description, is_public: true,
-          creator: null, created_at: new Date().toISOString(), config, postCount: 0
-        }));
-        setCommunities(fallback as any);
-        return;
-      }
-      let countMap: Record<string, number> = {};
-      try {
-        const { data: postCounts } = await supabase.from('posts').select('community').not('community', 'is', null);
-        if (postCounts) postCounts.forEach((p: { community: string | null }) => { if (p.community) countMap[p.community] = (countMap[p.community] || 0) + 1; });
-      } catch {}
-
-      const merged: CommunityWithMeta[] = [];
-      if (dbCommunities && dbCommunities.length > 0) {
-        dbCommunities.forEach((dbComm: Community) => {
-          const resolvedName = NAME_ALIASES[dbComm.name] || dbComm.name;
-          const config = COMMUNITY_BY_NAME[resolvedName] || COMMUNITY_BY_NAME[dbComm.name] || { name: dbComm.name, description: dbComm.description, icon: FALLBACK_ICON, color: '#81D8D0', category: 'core' as const };
-          merged.push({ ...dbComm, name: resolvedName, config, postCount: countMap[dbComm.id] || 0 });
-        });
-        const dbNames = new Set(dbCommunities.map((c: Community) => c.name));
-        const dbResolvedNames = new Set(dbCommunities.map((c: Community) => NAME_ALIASES[c.name] || c.name));
-        COMMUNITIES_CONFIG.forEach((config, i) => {
-          if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) {
-            merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), config, postCount: 0 } as any);
-          }
-        });
-      } else {
-        COMMUNITIES_CONFIG.forEach((config, i) => {
-          merged.push({ id: `pending-${i}`, name: config.name, description: config.description, is_public: true, creator: null, created_at: new Date().toISOString(), config, postCount: 0 } as any);
-        });
-      }
-      setCommunities(merged);
-    } catch (err) {
-      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({
-        id: `local-${i}`, name: config.name, description: config.description, is_public: true,
-        creator: null, created_at: new Date().toISOString(), config, postCount: 0
-      }));
-      setCommunities(fallback as any);
-    } finally { setIsLoading(false); }
-  };
-
-  useEffect(() => { loadCommunities(); }, []);
-
-  return {
-    communities, isLoading, refreshCommunities: loadCommunities,
-    getCommunityById: (id: string) => communities.find(c => c.id === id),
-    getCommunityByName: (name: string) => communities.find(c => c.name === name),
-  };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useCommunities.ts",
+  "created_at": "2026-02-27T05:36:04.181Z",
+  "file_content": "import { useState, useEffect } from 'react';\nimport { supabase } from './supabase';\nimport type { Community } from './supabase';\nimport { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';\nimport { FALLBACK_ICON } from './communitiesConfig';\nimport type { CommunityConfig } from './communitiesConfig';\n\n// Mapeamento de nomes antigos do banco → nomes atuais do config\n// Evita duplicatas quando o SQL de rename ainda não foi executado\nconst NAME_ALIASES: Record<string, string> = {\n  'Zona de Intensidade': 'Mentes em Tensão',\n};\n\nexport interface CommunityWithMeta extends Community {\n  config: CommunityConfig;\n  postCount: number;\n}\n\nexport function useCommunities() {\n  const [communities, setCommunities] = useState<CommunityWithMeta[]>([]);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const loadCommunities = async () => {\n    try {\n      setIsLoading(true);\n\n      // Buscar comunidades do banco\n      const { data: dbCommunities, error } = await supabase\n        .from('communities')\n        .select('*')\n        .order('name');\n\n      if (error) {\n        console.error('Erro ao buscar comunidades:', error);\n        // Fallback: usar config local\n        const fallback = COMMUNITIES_CONFIG.map((config, i) => ({\n          id: `local-${i}`,\n          name: config.name,\n          description: config.description,\n          is_public: true,\n          creator: null,\n          created_at: new Date().toISOString(),\n          config,\n          postCount: 0\n        }));\n        setCommunities(fallback);\n        return;\n      }\n\n      // Buscar contagem de posts por comunidade (separado, falha não bloqueia)\n      let countMap: Record<string, number> = {};\n      try {\n        const { data: postCounts } = await supabase\n          .from('posts')\n          .select('community')\n          .not('community', 'is', null);\n\n        if (postCounts) {\n          postCounts.forEach((p: { community: string | null }) => {\n            if (p.community) {\n              countMap[p.community] = (countMap[p.community] || 0) + 1;\n            }\n          });\n        }\n      } catch (countErr) {\n        // Contagem falhou — seguir com count = 0\n        console.warn('Erro ao contar posts por comunidade:', countErr);\n      }\n\n      // Merge: DB communities + config\n      const merged: CommunityWithMeta[] = [];\n\n      if (dbCommunities && dbCommunities.length > 0) {\n        dbCommunities.forEach((dbComm: Community) => {\n          // Resolver alias: se o banco tem nome antigo, usar config do nome novo\n          const resolvedName = NAME_ALIASES[dbComm.name] || dbComm.name;\n          const config = COMMUNITY_BY_NAME[resolvedName] || COMMUNITY_BY_NAME[dbComm.name] || {\n            name: dbComm.name,\n            description: dbComm.description,\n            icon: FALLBACK_ICON,\n            color: '#81D8D0',\n            category: 'core' as const,\n            status: 'awaiting_founder' as const,\n            moderatedByMila: false,\n          };\n          merged.push({\n            ...dbComm,\n            // Se tem alias, mostrar o nome novo na UI\n            name: resolvedName,\n            config,\n            postCount: countMap[dbComm.id] || 0\n          });\n        });\n\n        // Adicionar comunidades do config que NÃO existem no banco\n        // Considerar aliases: se DB tem \"Zona de Intensidade\", config \"Mentes em Tensão\" já foi coberto\n        const dbNames = new Set(dbCommunities.map((c: Community) => c.name));\n        const dbResolvedNames = new Set(dbCommunities.map((c: Community) => NAME_ALIASES[c.name] || c.name));\n        COMMUNITIES_CONFIG.forEach((config, i) => {\n          if (!dbNames.has(config.name) && !dbResolvedNames.has(config.name)) {\n            merged.push({\n              id: `pending-${i}`,\n              name: config.name,\n              description: config.description,\n              is_public: true,\n              creator: null,\n              created_at: new Date().toISOString(),\n              config,\n              postCount: 0\n            });\n          }\n        });\n      } else {\n        // Nenhuma comunidade no banco, usar todas do config\n        COMMUNITIES_CONFIG.forEach((config, i) => {\n          merged.push({\n            id: `pending-${i}`,\n            name: config.name,\n            description: config.description,\n            is_public: true,\n            creator: null,\n            created_at: new Date().toISOString(),\n            config,\n            postCount: 0\n          });\n        });\n      }\n\n      setCommunities(merged);\n    } catch (err) {\n      console.error('Erro ao carregar comunidades:', err);\n      // Fallback final: usar config local para nunca travar\n      const fallback = COMMUNITIES_CONFIG.map((config, i) => ({\n        id: `local-${i}`,\n        name: config.name,\n        description: config.description,\n        is_public: true,\n        creator: null,\n        created_at: new Date().toISOString(),\n        config,\n        postCount: 0\n      }));\n      setCommunities(fallback);\n    } finally {\n      // SEMPRE liberar loading, sem exceção\n      setIsLoading(false);\n    }\n  };\n\n  useEffect(() => {\n    loadCommunities();\n  }, []);\n\n  const getCommunityById = (id: string): CommunityWithMeta | undefined => {\n    return communities.find(c => c.id === id);\n  };\n\n  const getCommunityByName = (name: string): CommunityWithMeta | undefined => {\n    return communities.find(c => c.name === name);\n  };\n\n  return {\n    communities,\n    isLoading,\n    refreshCommunities: loadCommunities,\n    getCommunityById,\n    getCommunityByName\n  };\n}"
 }

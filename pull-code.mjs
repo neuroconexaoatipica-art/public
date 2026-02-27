@@ -1,51 +1,72 @@
-import "dotenv/config";
-// pull-code.mjs — Ponte Supabase: puxa arquivos de code_deploy
-import { createClient } from "@supabase/supabase-js";
-import { writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+// pull-code.mjs — Puxa arquivos do Supabase KV para o Codespace
+// Uso: node pull-code.mjs
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import fs from "fs";
+import path from "path";
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente");
-  process.exit(1);
-}
+const SUPABASE_URL = "https://ieieohtnaymykxiqnmlc.supabase.co";
+const SERVER_BASE = `${SUPABASE_URL}/functions/v1/make-server-6c28e0e2`;
+const ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllaWVvaHRuYXlteWt4aXFubWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTQ1NzMsImV4cCI6MjA4NjA3MDU3M30.32LjQe1dQLGAfbyfK8KkjNlXOGkZGaWEgI20y3gl3Hc";
 
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const PREFIX = "code_deploy:";
 
-async function pull() {
-  const { data, error } = await sb
-    .from("code_deploy")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+async function main() {
+  console.log("Conectando ao Supabase KV...");
+  console.log(`   Endpoint: ${SERVER_BASE}/deploy-list`);
 
-  if (error) { console.error("❌ Erro ao buscar:", error.message); process.exit(1); }
-  if (!data || data.length === 0) { console.log("✅ Nenhum arquivo pendente."); return; }
+  const res = await fetch(`${SERVER_BASE}/deploy-list?prefix=${PREFIX}`, {
+    headers: { Authorization: `Bearer ${ANON_KEY}` },
+  });
 
-  console.log(`📦 ${data.length} arquivo(s) pendente(s):\n`);
+  if (!res.ok) {
+    console.error(`Erro HTTP ${res.status}: ${await res.text()}`);
+    process.exit(1);
+  }
 
-  for (const row of data) {
+  const json = await res.json();
+
+  if (!json.ok) {
+    console.error("Erro do servidor:", json.error);
+    process.exit(1);
+  }
+
+  console.log(`Encontrados ${json.count} arquivos\n`);
+
+  if (json.count === 0) {
+    console.log("Nenhum arquivo com prefixo", PREFIX);
+    console.log("Rode o DeployBridge no Figma Make primeiro.");
+    process.exit(0);
+  }
+
+  let ok = 0;
+  let errs = 0;
+
+  for (const file of json.files) {
     try {
-      mkdirSync(dirname(row.file_path), { recursive: true });
-      writeFileSync(row.file_path, row.file_content, "utf-8");
-      console.log(`  ✅ ${row.file_path}`);
+      const filePath = file.key.replace(PREFIX, "");
+      const content = typeof file.value === "string"
+        ? file.value
+        : JSON.stringify(file.value, null, 2);
 
-      await sb
-        .from("code_deploy")
-        .update({ status: "pulled", pulled_at: new Date().toISOString() })
-        .eq("id", row.id);
+      const dir = path.dirname(filePath);
+      if (dir && dir !== ".") {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, content, "utf-8");
+      console.log(`  OK ${filePath}`);
+      ok++;
     } catch (err) {
-      console.error(`  ❌ ${row.file_path}: ${err.message}`);
-      await sb
-        .from("code_deploy")
-        .update({ status: "error" })
-        .eq("id", row.id);
+      console.error(`  ERRO ${file.key}: ${err.message}`);
+      errs++;
     }
   }
 
-  console.log("\n🎉 Ponte concluída!");
+  console.log(`\nConcluido: ${ok} escritos, ${errs} erros`);
 }
 
-pull();
+main().catch((err) => {
+  console.error("Falha fatal:", err);
+  process.exit(1);
+});

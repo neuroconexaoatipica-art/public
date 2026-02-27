@@ -1,7 +1,7 @@
-/* Tipografia Oficial NeuroConexao Atipica */
-
-/* Inter - Tipografia Primaria (Interface) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-/* Lora - Tipografia Secundaria (Manifesto e Textos Longos) */
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+{
+  "lote": 5,
+  "status": "pending",
+  "file_path": "src/styles/fonts.css",
+  "created_at": "2026-02-27T05:36:30.809Z",
+  "file_content": "/* Tipografia Oficial NeuroConexão Atípica */\n\n/* Inter - Tipografia Primária (Interface) */\n@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');\n\n/* Lora - Tipografia Secundária (Manifesto e Textos Longos) */\n@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');\n"
+}

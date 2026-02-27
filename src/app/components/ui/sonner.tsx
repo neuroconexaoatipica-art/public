@@ -1,0 +1,7 @@
+{
+  "lote": 6,
+  "status": "pending",
+  "file_path": "src/app/components/ui/sonner.tsx",
+  "created_at": "2026-02-27T05:36:38.936Z",
+  "file_content": "\"use client\";\n\nimport { useTheme } from \"next-themes\";\nimport { Toaster as Sonner, ToasterProps } from \"sonner\";\n\nconst Toaster = ({ ...props }: ToasterProps) => {\n  const { theme = \"system\" } = useTheme();\n\n  return (\n    <Sonner\n      theme={theme as ToasterProps[\"theme\"]}\n      className=\"toaster group\"\n      style={\n        {\n          \"--normal-bg\": \"var(--popover)\",\n          \"--normal-text\": \"var(--popover-foreground)\",\n          \"--normal-border\": \"var(--border)\",\n        } as React.CSSProperties\n      }\n      {...props}\n    />\n  );\n};\n\nexport { Toaster };\n"
+}

@@ -1,71 +1,7 @@
-import { useState } from 'react';
-import { UserAvatar } from './UserAvatar';
-import { useComments, useProfileContext, isSuperAdmin } from '../../lib';
-
-interface Props {
-  postId: string;
-  onNavigateToProfile?: (userId: string) => void;
-}
-
-export function CommentSection({ postId, onNavigateToProfile }: Props) {
-  const { user: currentUser } = useProfileContext();
-  const { comments, isLoading, addComment, deleteComment } = useComments(postId);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    await addComment(text.trim());
-    setText('');
-    setSending(false);
-  };
-
-  const timeAgo = (date: string) => {
-    const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-    if (diff < 60) return 'agora';
-    if (diff < 3600) return `${Math.floor(diff / 60)}min`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return `${Math.floor(diff / 86400)}d`;
-  };
-
-  return (
-    <div className="mt-3 pt-3 border-t border-white/10">
-      {isLoading ? (
-        <p className="text-white/40 text-sm">Carregando...</p>
-      ) : (
-        <div className="space-y-3 max-h-64 overflow-y-auto">
-          {comments.map(c => (
-            <div key={c.id} className="flex gap-2">
-              <UserAvatar src={c.author_data?.profile_photo} name={c.author_data?.name || 'Membro'} size={28} onClick={() => onNavigateToProfile?.(c.author)} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-white text-sm font-medium cursor-pointer hover:text-[#81D8D0]" onClick={() => onNavigateToProfile?.(c.author)}>{c.author_data?.name}</span>
-                  <span className="text-white/30 text-xs">{timeAgo(c.created_at)}</span>
-                  {(c.author === currentUser?.id || isSuperAdmin(currentUser?.role)) && (
-                    <button onClick={() => deleteComment(c.id)} className="text-white/30 hover:text-[#C8102E] text-xs ml-auto">×</button>
-                  )}
-                </div>
-                <p className="text-white/80 text-sm">{c.content}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {currentUser && (
-        <div className="flex gap-2 mt-3">
-          <input
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            placeholder="Escreva um comentario..."
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50"
-          />
-          <button onClick={handleSubmit} disabled={!text.trim() || sending} className="px-4 py-2 bg-[#81D8D0] text-black rounded-xl text-sm font-semibold disabled:opacity-40">
-            {sending ? '...' : 'Enviar'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
+{
+  "lote": 4,
+  "status": "pending",
+  "file_path": "src/app/components/CommentSection.tsx",
+  "created_at": "2026-02-27T05:36:21.184Z",
+  "file_content": "import { useState } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { MessageCircle, Send, Trash2, Loader2, ChevronDown, ChevronUp } from \"lucide-react\";\nimport { useComments } from \"../../lib/useComments\";\nimport { hasAppAccess, hasModAccess, useProfileContext } from \"../../lib\";\nimport { UserAvatar } from \"./UserAvatar\";\nimport { InlineBadges } from \"./InlineBadges\";\n\ninterface CommentSectionProps {\n  postId: string;\n  onAuthorClick?: (userId: string) => void;\n}\n\nexport function CommentSection({ postId, onAuthorClick }: CommentSectionProps) {\n  const { comments, count, isLoading, addComment, deleteComment } = useComments(postId);\n  const { user } = useProfileContext();\n  const canComment = hasAppAccess(user?.role);\n  const canModerate = hasModAccess(user?.role);\n\n  const [newComment, setNewComment] = useState(\"\");\n  const [isSending, setIsSending] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n  const [isExpanded, setIsExpanded] = useState(false);\n\n  const handleSubmit = async (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!newComment.trim() || isSending) return;\n\n    setIsSending(true);\n    setError(null);\n\n    const result = await addComment(newComment);\n\n    if (result.success) {\n      setNewComment(\"\");\n      setIsExpanded(true);\n    } else {\n      setError(result.error || \"Erro ao comentar\");\n      setTimeout(() => setError(null), 4000);\n    }\n\n    setIsSending(false);\n  };\n\n  const handleDelete = async (commentId: string) => {\n    if (!confirm(\"Deletar este comentário?\")) return;\n    await deleteComment(commentId);\n  };\n\n  const getTimeAgo = (dateStr: string) => {\n    try {\n      const now = new Date();\n      const date = new Date(dateStr);\n      const diffMs = now.getTime() - date.getTime();\n      const diffMins = Math.floor(diffMs / 60000);\n      const diffHours = Math.floor(diffMs / 3600000);\n      const diffDays = Math.floor(diffMs / 86400000);\n\n      if (diffMins < 1) return \"agora\";\n      if (diffMins < 60) return `${diffMins}min`;\n      if (diffHours < 24) return `${diffHours}h`;\n      if (diffDays < 7) return `${diffDays}d`;\n      return `${Math.floor(diffDays / 7)}sem`;\n    } catch {\n      return \"\";\n    }\n  };\n\n  const getRoleColor = (role: string) => {\n    const colors: Record<string, string> = {\n      founder: \"text-[#81D8D0]\",\n      admin: \"text-[#C8102E]\",\n      member: \"text-[#FF6B35]\",\n    };\n    return colors[role] || \"text-white/60\";\n  };\n\n  return (\n    <div className=\"mt-4 pt-4 border-t border-white/5\">\n      {/* Toggle de comentários */}\n      <button\n        onClick={() => setIsExpanded(!isExpanded)}\n        className=\"flex items-center gap-2 text-white/60 hover:text-white/90 transition-colors mb-3\"\n      >\n        <MessageCircle className=\"h-4 w-4\" />\n        <span className=\"text-sm font-medium\">\n          {count === 0\n            ? \"Comentar\"\n            : count === 1\n            ? \"1 comentário\"\n            : `${count} comentários`}\n        </span>\n        {count > 0 &&\n          (isExpanded ? (\n            <ChevronUp className=\"h-4 w-4\" />\n          ) : (\n            <ChevronDown className=\"h-4 w-4\" />\n          ))}\n      </button>\n\n      {/* Input de comentário (sempre visível se pode comentar) */}\n      {canComment && (\n        <form onSubmit={handleSubmit} className=\"flex items-start gap-3 mb-4\">\n          <UserAvatar\n            name={user?.display_name || user?.name || \"\"}\n            photoUrl={user?.profile_photo}\n            size=\"sm\"\n          />\n          <div className=\"flex-1 relative\">\n            <input\n              type=\"text\"\n              value={newComment}\n              onChange={(e) => setNewComment(e.target.value)}\n              placeholder=\"Escreva um comentário...\"\n              maxLength={1000}\n              disabled={isSending}\n              className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#81D8D0] focus:border-transparent disabled:opacity-50\"\n            />\n            <button\n              type=\"submit\"\n              disabled={!newComment.trim() || isSending}\n              className=\"absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[#81D8D0] hover:text-[#81D8D0]/80 disabled:text-white/20 disabled:cursor-not-allowed transition-colors\"\n            >\n              {isSending ? (\n                <Loader2 className=\"h-4 w-4 animate-spin\" />\n              ) : (\n                <Send className=\"h-4 w-4\" />\n              )}\n            </button>\n          </div>\n        </form>\n      )}\n\n      {/* Erro */}\n      <AnimatePresence>\n        {error && (\n          <motion.div\n            initial={{ opacity: 0, height: 0 }}\n            animate={{ opacity: 1, height: \"auto\" }}\n            exit={{ opacity: 0, height: 0 }}\n            className=\"mb-3 px-3 py-2 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-lg\"\n          >\n            <p className=\"text-xs text-[#C8102E] font-medium\">{error}</p>\n          </motion.div>\n        )}\n      </AnimatePresence>\n\n      {/* Lista de comentários */}\n      <AnimatePresence>\n        {isExpanded && (\n          <motion.div\n            initial={{ opacity: 0, height: 0 }}\n            animate={{ opacity: 1, height: \"auto\" }}\n            exit={{ opacity: 0, height: 0 }}\n            transition={{ duration: 0.2 }}\n            className=\"space-y-3 overflow-hidden\"\n          >\n            {isLoading ? (\n              <div className=\"flex items-center gap-2 py-3\">\n                <Loader2 className=\"h-4 w-4 animate-spin text-white/40\" />\n                <span className=\"text-sm text-white/40\">Carregando...</span>\n              </div>\n            ) : comments.length === 0 ? (\n              <p className=\"text-sm text-white/40 py-2\">\n                Nenhum comentário ainda. Seja o primeiro!\n              </p>\n            ) : (\n              comments.map((comment) => {\n                const isOwnComment = user?.id === comment.author;\n                const canDelete = isOwnComment || canModerate;\n\n                return (\n                  <motion.div\n                    key={comment.id}\n                    initial={{ opacity: 0, y: 10 }}\n                    animate={{ opacity: 1, y: 0 }}\n                    exit={{ opacity: 0, y: -10 }}\n                    className=\"flex items-start gap-3 group\"\n                  >\n                    <UserAvatar\n                      name={comment.author_data?.display_name || comment.author_data?.name || \"Membro\"}\n                      photoUrl={comment.author_data?.profile_photo}\n                      size=\"sm\"\n                      onClick={\n                        onAuthorClick\n                          ? () => onAuthorClick(comment.author)\n                          : undefined\n                      }\n                    />\n                    <div className=\"flex-1 min-w-0\">\n                      <div className=\"bg-white/5 rounded-xl px-4 py-2.5\">\n                        <div className=\"flex items-center gap-2 mb-1\">\n                          <button\n                            onClick={\n                              onAuthorClick\n                                ? () => onAuthorClick(comment.author)\n                                : undefined\n                            }\n                            className={`text-sm font-semibold text-white hover:text-[#81D8D0] transition-colors ${\n                              onAuthorClick ? \"cursor-pointer\" : \"\"\n                            }`}\n                          >\n                            {comment.author_data?.display_name || comment.author_data?.name || \"Membro\"}\n                          </button>\n                          <InlineBadges userId={comment.author} maxVisible={2} />\n                          {comment.author_data?.role &&\n                            comment.author_data.role !== \"member\" && (\n                              <span\n                                className={`text-xs font-semibold ${getRoleColor(\n                                  comment.author_data.role\n                                )}`}\n                              >\n                                {comment.author_data.role === \"founder\"\n                                  ? \"Fundadora\"\n                                  : \"Admin\"}\n                              </span>\n                            )}\n                          <span className=\"text-xs text-white/40\">\n                            {getTimeAgo(comment.created_at)}\n                          </span>\n                        </div>\n                        <p className=\"text-sm text-white/85 leading-relaxed whitespace-pre-wrap\">\n                          {comment.content}\n                        </p>\n                      </div>\n\n                      {/* Botão deletar */}\n                      {canDelete && (\n                        <button\n                          onClick={() => handleDelete(comment.id)}\n                          className=\"mt-1 ml-2 flex items-center gap-1 text-xs text-white/30 hover:text-[#C8102E] transition-colors opacity-0 group-hover:opacity-100\"\n                        >\n                          <Trash2 className=\"h-3 w-3\" />\n                          <span>Deletar</span>\n                        </button>\n                      )}\n                    </div>\n                  </motion.div>\n                );\n              })\n            )}\n          </motion.div>\n        )}\n      </AnimatePresence>\n    </div>\n  );\n}"
 }

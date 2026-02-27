@@ -1,30 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from './supabase';
-
-const PUBLIC_SEATS = 50;
-const REAL_MAX = 100;
-
-export function useSeats() {
-  const [seatsUsed, setSeatsUsed] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadSeats = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_seats_count');
-      if (!error && data !== null) setSeatsUsed(data);
-    } catch (err) {
-      console.error('Erro ao contar vagas:', err);
-    } finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => { loadSeats(); }, [loadSeats]);
-
-  const publicRemaining = Math.max(0, PUBLIC_SEATS - seatsUsed);
-  const realRemaining = Math.max(0, REAL_MAX - seatsUsed);
-
-  return {
-    seatsUsed, seatsTotal: PUBLIC_SEATS, seatsRemaining: publicRemaining,
-    isFull: publicRemaining <= 0, isReallyFull: realRemaining <= 0, isLoading,
-    refreshSeats: loadSeats, realMax: REAL_MAX, realRemaining,
-  };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useSeats.ts",
+  "created_at": "2026-02-27T05:36:08.687Z",
+  "file_content": "import { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\n\n// Estratégia 50/100:\n// - PUBLIC_SEATS (50): anunciado publicamente na landing\n// - REAL_MAX (100): limite real liberado silenciosamente\n// O contador na landing mostra X / 50\n// O backend permite até 100 totais\nconst PUBLIC_SEATS = 50;\nconst REAL_MAX = 100;\n\nexport function useSeats() {\n  const [seatsUsed, setSeatsUsed] = useState(0);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const loadSeats = useCallback(async () => {\n    try {\n      const { data, error } = await supabase.rpc('get_seats_count');\n      if (!error && data !== null) {\n        setSeatsUsed(data);\n      }\n    } catch (err) {\n      console.error('Erro ao contar vagas:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    loadSeats();\n  }, [loadSeats]);\n\n  // Para a landing: mostra vagas sobre o total público (50)\n  const publicRemaining = Math.max(0, PUBLIC_SEATS - seatsUsed);\n  // Internamente: permite até 100\n  const realRemaining = Math.max(0, REAL_MAX - seatsUsed);\n\n  return {\n    seatsUsed,\n    seatsTotal: PUBLIC_SEATS,       // Exibido na UI\n    seatsRemaining: publicRemaining, // Exibido na UI\n    isFull: publicRemaining <= 0,    // UI mostra \"esgotado\" após 50\n    isReallyFull: realRemaining <= 0, // Verdadeiro limite (100)\n    isLoading,\n    refreshSeats: loadSeats,\n    // Para uso interno (painel soberano)\n    realMax: REAL_MAX,\n    realRemaining,\n  };\n}\n"
 }

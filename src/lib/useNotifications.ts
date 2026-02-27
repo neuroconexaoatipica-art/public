@@ -1,53 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from './supabase';
-
-export interface Notification { id: string; user_id: string; type: string; title: string; content: string | null; reference_id: string | null; reference_type: string | null; is_read: boolean; created_at: string; }
-
-export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadNotifications = useCallback(async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setIsLoading(false); return; }
-      const { data, error } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50);
-      if (error) throw error;
-      setNotifications(data || []);
-      setUnreadCount((data || []).filter((n: any) => !n.is_read).length);
-    } catch (err) { console.error('[useNotifications] Erro:', err); } finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    loadNotifications();
-    const setupRealtime = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const channel = supabase.channel('notifications-realtime').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-        const newNotif = payload.new as Notification;
-        setNotifications(prev => [newNotif, ...prev]);
-        setUnreadCount(prev => prev + 1);
-      }).subscribe();
-      return () => { supabase.removeChannel(channel); };
-    };
-    const cleanup = setupRealtime();
-    return () => { cleanup.then(fn => fn?.()); };
-  }, [loadNotifications]);
-
-  const markAsRead = useCallback(async (notificationId: string) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
-    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  }, []);
-
-  const markAllAsRead = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    setUnreadCount(0);
-  }, []);
-
-  return { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, refresh: loadNotifications };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useNotifications.ts",
+  "created_at": "2026-02-27T05:36:06.812Z",
+  "file_content": "import { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\n\nexport interface Notification {\n  id: string;\n  user_id: string;\n  type: string;\n  title: string;\n  content: string | null;\n  reference_id: string | null;\n  reference_type: string | null;\n  is_read: boolean;\n  created_at: string;\n}\n\nexport function useNotifications() {\n  const [notifications, setNotifications] = useState<Notification[]>([]);\n  const [unreadCount, setUnreadCount] = useState(0);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const loadNotifications = useCallback(async () => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) { setIsLoading(false); return; }\n\n      const { data, error } = await supabase\n        .from('notifications')\n        .select('*')\n        .eq('user_id', user.id)\n        .order('created_at', { ascending: false })\n        .limit(50);\n\n      if (error) throw error;\n      setNotifications(data || []);\n      setUnreadCount((data || []).filter(n => !n.is_read).length);\n    } catch (err) {\n      console.error('[useNotifications] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  // Realtime subscription\n  useEffect(() => {\n    loadNotifications();\n\n    const setupRealtime = async () => {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return;\n\n      const channel = supabase\n        .channel('notifications-realtime')\n        .on('postgres_changes', {\n          event: 'INSERT',\n          schema: 'public',\n          table: 'notifications',\n          filter: `user_id=eq.${user.id}`,\n        }, (payload) => {\n          const newNotif = payload.new as Notification;\n          setNotifications(prev => [newNotif, ...prev]);\n          setUnreadCount(prev => prev + 1);\n        })\n        .subscribe();\n\n      return () => { supabase.removeChannel(channel); };\n    };\n\n    const cleanup = setupRealtime();\n    return () => { cleanup.then(fn => fn?.()); };\n  }, [loadNotifications]);\n\n  const markAsRead = useCallback(async (notificationId: string) => {\n    await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);\n    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));\n    setUnreadCount(prev => Math.max(0, prev - 1));\n  }, []);\n\n  const markAllAsRead = useCallback(async () => {\n    const { data: { user } } = await supabase.auth.getUser();\n    if (!user) return;\n    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);\n    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));\n    setUnreadCount(0);\n  }, []);\n\n  return { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, refresh: loadNotifications };\n}\n"
 }

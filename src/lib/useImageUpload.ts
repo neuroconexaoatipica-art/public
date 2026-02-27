@@ -1,44 +1,7 @@
-import { useState } from 'react';
-import { supabase } from './supabase';
-
-interface UploadResult { success: boolean; url?: string; error?: string; }
-
-export function useImageUpload() {
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const uploadImage = async (file: File, bucket: 'avatars' | 'post-images' = 'avatars', folder?: string): Promise<UploadResult> => {
-    try {
-      setIsUploading(true); setProgress(0);
-      if (file.size > 5 * 1024 * 1024) return { success: false, error: 'Imagem muito grande. Maximo 5MB.' };
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-      if (!allowedTypes.includes(file.type)) return { success: false, error: 'Tipo nao suportado. Use JPG, PNG, WebP ou GIF.' };
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return { success: false, error: 'Voce precisa estar logado.' };
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
-      const filePath = folder ? `${folder}/${fileName}` : fileName;
-      setProgress(50);
-      const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { cacheControl: '3600', upsert: true });
-      if (uploadError) throw uploadError;
-      setProgress(80);
-      const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
-      setProgress(100);
-      return { success: true, url: publicUrl };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Erro ao fazer upload.' };
-    } finally { setIsUploading(false); setTimeout(() => setProgress(0), 500); }
-  };
-
-  const deleteImage = async (url: string, bucket: 'avatars' | 'post-images' = 'avatars'): Promise<boolean> => {
-    try {
-      const urlParts = url.split(`/${bucket}/`);
-      if (urlParts.length < 2) return false;
-      const { error } = await supabase.storage.from(bucket).remove([urlParts[1]]);
-      if (error) throw error;
-      return true;
-    } catch { return false; }
-  };
-
-  return { uploadImage, deleteImage, isUploading, progress };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useImageUpload.ts",
+  "created_at": "2026-02-27T05:36:05.500Z",
+  "file_content": "import { useState } from 'react';\nimport { supabase } from './supabase';\n\ninterface UploadResult {\n  success: boolean;\n  url?: string;\n  error?: string;\n}\n\nexport function useImageUpload() {\n  const [isUploading, setIsUploading] = useState(false);\n  const [progress, setProgress] = useState(0);\n\n  const uploadImage = async (\n    file: File,\n    bucket: 'avatars' | 'post-images' = 'avatars',\n    folder?: string\n  ): Promise<UploadResult> => {\n    try {\n      setIsUploading(true);\n      setProgress(0);\n\n      // Validações\n      const maxSize = 5 * 1024 * 1024; // 5MB\n      if (file.size > maxSize) {\n        return {\n          success: false,\n          error: 'Imagem muito grande. Máximo 5MB.'\n        };\n      }\n\n      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];\n      if (!allowedTypes.includes(file.type)) {\n        return {\n          success: false,\n          error: 'Tipo de arquivo não suportado. Use JPG, PNG, WebP ou GIF.'\n        };\n      }\n\n      const { data: { session } } = await supabase.auth.getSession();\n      \n      if (!session?.user) {\n        return {\n          success: false,\n          error: 'Você precisa estar logado para fazer upload.'\n        };\n      }\n\n      // Criar nome único para o arquivo\n      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';\n      const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;\n      const filePath = folder ? `${folder}/${fileName}` : fileName;\n\n      setProgress(50);\n\n      // Upload para Supabase Storage\n      const { error: uploadError, data } = await supabase.storage\n        .from(bucket)\n        .upload(filePath, file, {\n          cacheControl: '3600',\n          upsert: true\n        });\n\n      if (uploadError) throw uploadError;\n\n      setProgress(80);\n\n      // Obter URL pública\n      const { data: { publicUrl } } = supabase.storage\n        .from(bucket)\n        .getPublicUrl(filePath);\n\n      setProgress(100);\n\n      return {\n        success: true,\n        url: publicUrl\n      };\n    } catch (error: any) {\n      console.error('Erro ao fazer upload:', error);\n      return {\n        success: false,\n        error: error.message || 'Erro ao fazer upload da imagem.'\n      };\n    } finally {\n      setIsUploading(false);\n      setTimeout(() => setProgress(0), 500);\n    }\n  };\n\n  const deleteImage = async (\n    url: string,\n    bucket: 'avatars' | 'post-images' = 'avatars'\n  ): Promise<boolean> => {\n    try {\n      // Extrair o caminho do arquivo da URL\n      const urlParts = url.split(`/${bucket}/`);\n      if (urlParts.length < 2) return false;\n\n      const filePath = urlParts[1];\n\n      const { error } = await supabase.storage\n        .from(bucket)\n        .remove([filePath]);\n\n      if (error) throw error;\n\n      return true;\n    } catch (error) {\n      console.error('Erro ao deletar imagem:', error);\n      return false;\n    }\n  };\n\n  return {\n    uploadImage,\n    deleteImage,\n    isUploading,\n    progress\n  };\n}\n"
 }

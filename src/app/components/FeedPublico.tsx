@@ -1,51 +1,7 @@
-import { useState } from 'react';
-import { PostCard } from './PostCard';
-import { CreatePostModal } from './CreatePostModal';
-import { useProfileContext, usePosts } from '../../lib';
-
-interface Props {
-  onBack: () => void;
-  onNavigateToProfile?: (userId: string) => void;
-}
-
-export function FeedPublico({ onBack, onNavigateToProfile }: Props) {
-  const { user } = useProfileContext();
-  const { posts, isLoading, hasMore, loadMore, isLoadingMore, refreshPosts, deletePost } = usePosts(true);
-  const [showCreate, setShowCreate] = useState(false);
-
-  const handleDelete = async (postId: string) => {
-    if (confirm('Excluir este post?')) await deletePost(postId);
-  };
-
-  return (
-    <div className="min-h-screen bg-black">
-      <header className="sticky top-0 z-40 bg-black/95 backdrop-blur border-b border-white/10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="text-[#81D8D0] hover:underline text-sm">← Voltar</button>
-            <h1 className="text-white font-semibold">Feed Publico</h1>
-          </div>
-          {user && <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-[#81D8D0] text-black rounded-xl text-sm font-semibold">+ Novo Post</button>}
-        </div>
-      </header>
-
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {isLoading ? (
-          <div className="text-center py-12"><div className="w-8 h-8 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto"></div></div>
-        ) : posts.length === 0 ? (
-          <div className="text-center py-16 bg-white/5 rounded-2xl border border-white/10">
-            <div className="text-4xl mb-3">📝</div>
-            <p className="text-white/60">Nenhum post publico ainda.</p>
-          </div>
-        ) : (
-          <>
-            {posts.map(p => <PostCard key={p.id} post={p} onNavigateToProfile={onNavigateToProfile} onDelete={handleDelete} />)}
-            {hasMore && <button onClick={loadMore} disabled={isLoadingMore} className="w-full py-3 text-[#81D8D0] text-sm hover:underline">{isLoadingMore ? 'Carregando...' : 'Ver mais'}</button>}
-          </>
-        )}
-      </div>
-
-      <CreatePostModal isOpen={showCreate} onClose={() => setShowCreate(false)} onSuccess={refreshPosts} />
-    </div>
-  );
+{
+  "lote": 4,
+  "status": "pending",
+  "file_path": "src/app/components/FeedPublico.tsx",
+  "created_at": "2026-02-27T05:36:19.202Z",
+  "file_content": "import { motion } from \"motion/react\";\nimport { ArrowLeft, TrendingUp, Clock } from \"lucide-react\";\nimport { usePosts, useCommunitiesContext } from \"../../lib\";\nimport { PostCard } from \"./PostCard\";\n\ninterface FeedPublicoProps {\n  onBack: () => void;\n  onNavigateToProfile?: (userId: string) => void;\n}\n\nexport function FeedPublico({ onBack, onNavigateToProfile }: FeedPublicoProps) {\n  const { posts, isLoading, isLoadingMore, hasMore, loadMore } = usePosts({ isPublicFeed: true });\n  const { communities } = useCommunitiesContext();\n\n  // Mapa de ID → nome da comunidade\n  const communityNameMap: Record<string, string> = {};\n  communities.forEach(c => { communityNameMap[c.id] = c.name; });\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Header */}\n      <div className=\"w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40\">\n        <div className=\"mx-auto max-w-[900px] px-6 py-4\">\n          <div className=\"flex items-center justify-between\">\n            <button\n              onClick={onBack}\n              className=\"flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors\"\n            >\n              <ArrowLeft className=\"h-5 w-5\" />\n              <span className=\"font-medium\">Voltar</span>\n            </button>\n\n            <h1 className=\"text-xl font-semibold text-white\">\n              Feed Público\n            </h1>\n\n            <div className=\"w-24\"></div>\n          </div>\n        </div>\n      </div>\n\n      {/* Conteúdo */}\n      <div className=\"mx-auto max-w-[900px] px-6 py-8\">\n        {/* Introdução */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          animate={{ opacity: 1, y: 0 }}\n          transition={{ duration: 0.6 }}\n          className=\"mb-8\"\n        >\n          <div className=\"bg-gradient-to-br from-[#35363A] to-black border border-white/10 rounded-2xl p-8\">\n            <h2 className=\"text-2xl font-semibold text-white mb-3\">\n              Feed Público\n            </h2>\n            <p className=\"text-lg text-white/80 font-normal leading-relaxed mb-4\">\n              Aqui você vê posts públicos da NeuroConexão Atípica. Membros têm acesso a muito mais: \n              comunidades privadas, eventos exclusivos, e conexão direta com outras mentes intensas.\n            </p>\n          </div>\n        </motion.div>\n\n        {/* Posts Reais */}\n        <div className=\"space-y-6\">\n          {isLoading ? (\n            <div className=\"text-center py-12\">\n              <div className=\"w-12 h-12 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4\"></div>\n              <p className=\"text-white/60\">Carregando posts...</p>\n            </div>\n          ) : posts.length === 0 ? (\n            <div className=\"bg-white/3 border border-white/10 rounded-2xl p-12 text-center\">\n              <p className=\"text-xl text-white/60 mb-2\">Nenhum post público ainda</p>\n              <p className=\"text-sm text-white/40\">Os membros começarão a compartilhar conteúdo em breve.</p>\n            </div>\n          ) : (\n            posts.map((post) => (\n              <PostCard\n                key={post.id}\n                post={post}\n                onAuthorClick={onNavigateToProfile}\n                communityName={post.community ? communityNameMap[post.community] : undefined}\n              />\n            ))\n          )}\n          {!isLoading && hasMore && (\n            <div className=\"flex justify-center pt-6 pb-2\">\n              <button onClick={loadMore} disabled={isLoadingMore}\n                className=\"px-8 py-3 bg-white/5 border border-white/10 text-white/70 rounded-xl hover:bg-white/10 transition-all font-medium disabled:opacity-50\">\n                {isLoadingMore ? (\n                  <span className=\"flex items-center gap-2\">\n                    <span className=\"w-4 h-4 border-2 border-white/40 border-t-transparent rounded-full animate-spin\" />\n                    Carregando...\n                  </span>\n                ) : 'Carregar mais posts'}\n              </button>\n            </div>\n          )}\n        </div>\n\n        {/* Call to Action Final */}\n        <motion.div\n          initial={{ opacity: 0, y: 30 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6 }}\n          className=\"mt-12 bg-gradient-to-br from-[#81D8D0]/20 to-[#C8102E]/20 border border-[#81D8D0]/30 rounded-2xl p-8 text-center\"\n        >\n          <h3 className=\"text-2xl font-semibold text-white mb-3\">\n            Quer participar da conversa?\n          </h3>\n          <p className=\"text-lg text-white/80 font-normal mb-6\">\n            Membros podem criar posts e participar de todas as comunidades. \n            Entre inteiro(a) neste espaço.\n          </p>\n        </motion.div>\n      </div>\n    </div>\n  );\n}"
 }

@@ -1,37 +1,7 @@
-export { supabase, TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';
-export type { User, Community, Post, LiveInterest, Comment, UserRole } from './supabase';
-export type { Event, EventParticipant, EventType, RitualType, EventStatus, LocationType, ParticipantStatus } from './supabase';
-export { usePosts } from './usePosts';
-export type { PostWithAuthor } from './usePosts';
-export { useComments } from './useComments';
-export type { CommentWithAuthor } from './useComments';
-export { useImageUpload } from './useImageUpload';
-export { useSeats } from './useSeats';
-export type { CommunityWithMeta } from './CommunitiesContext';
-export { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME } from './communitiesConfig';
-export type { CommunityConfig } from './communitiesConfig';
-export { hasAppAccess, hasModAccess, hasLeadershipAccess, isSuperAdmin, needsLeadershipOnboarding, getDefaultPage, normalizeRole } from './roleEngine';
-export { ProfileProvider, useProfileContext } from './ProfileContext';
-export { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';
-export { usePlatformCopy, useHomeSections, useLegalPage, useLegalPages, useAnnouncements } from './useCMS';
-export type { PlatformCopy, HomeSection, LegalPage, LegalPageKey, Announcement } from './useCMS';
-export { useEvents, useEventDetail, EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS, RITUAL_TYPE_DESCRIPTIONS, EVENT_STATUS_LABELS, LOCATION_TYPE_LABELS } from './useEvents';
-export type { EventWithMeta, CreateEventInput } from './useEvents';
-export { useNotifications } from './useNotifications';
-export type { Notification } from './useNotifications';
-export { useChat } from './useChat';
-export type { ChatMessage } from './useChat';
-export { useReactions, REACTION_LABELS } from './useReactions';
-export type { ReactionType, ReactionCount } from './useReactions';
-export { useConnections } from './useConnections';
-export type { Connection } from './useConnections';
-export { useProfileVisits } from './useProfileVisits';
-export type { ProfileVisit } from './useProfileVisits';
-export { useTestimonials } from './useTestimonials';
-export type { Testimonial } from './useTestimonials';
-export { useReports, REPORT_TYPE_LABELS } from './useReports';
-export type { ReportType } from './useReports';
-export { useDailyChallenge } from './useDailyChallenge';
-export type { DailyChallenge, DailyCheckin } from './useDailyChallenge';
-export { usePrivateMessages } from './usePrivateMessages';
-export type { PrivateMessage, Conversation } from './usePrivateMessages';
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/index.ts",
+  "created_at": "2026-02-27T05:36:01.702Z",
+  "file_content": "export { supabase, TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';\nexport type { User, Community, Post, LiveInterest, Comment, UserRole } from './supabase';\nexport type { Event, EventParticipant, EventType, RitualType, EventStatus, LocationType, ParticipantStatus } from './supabase';\n// useProfile e useCommunities são LEGADOS — usar useProfileContext e useCommunitiesContext\n// export { useProfile } from './useProfile';\n// export { useCommunities } from './useCommunities';\nexport { usePosts } from './usePosts';\nexport type { PostWithAuthor } from './usePosts';\nexport { useComments } from './useComments';\nexport type { CommentWithAuthor } from './useComments';\nexport { useImageUpload } from './useImageUpload';\nexport { useSeats } from './useSeats';\nexport type { CommunityWithMeta } from './CommunitiesContext';\nexport { COMMUNITIES_CONFIG, COMMUNITY_BY_NAME, MILA_ACTIVE_COMMUNITIES, MILA_UUID, COMMUNITY_RITUAL_TYPES } from './communitiesConfig';\nexport type { CommunityConfig, CommunityRitualType } from './communitiesConfig';\nexport { hasAppAccess, hasModAccess, hasLeadershipAccess, isSuperAdmin, needsLeadershipOnboarding, getDefaultPage, normalizeRole } from './roleEngine';\nexport { isWaitingApproval, isBanned, getRolePower } from './roleEngine';\nexport { useRole } from './useRole';\nexport { useCommunityMembership } from './useCommunityMembership';\nexport type { MembershipStatus } from './useCommunityMembership';\nexport { ProfileProvider, useProfileContext } from './ProfileContext';\nexport { CommunitiesProvider, useCommunitiesContext } from './CommunitiesContext';\nexport { usePlatformCopy, useHomeSections, useLegalPage, useLegalPages, useAnnouncements } from './useCMS';\nexport type { PlatformCopy, HomeSection, LegalPage, LegalPageKey, Announcement } from './useCMS';\nexport { useEvents, useEventDetail, EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS, RITUAL_TYPE_DESCRIPTIONS, EVENT_STATUS_LABELS, LOCATION_TYPE_LABELS } from './useEvents';\nexport type { EventWithMeta, CreateEventInput } from './useEvents';\n\n// ── V9 MEGA: Novos hooks para rede social viva ──\nexport { useNotifications } from './useNotifications';\nexport type { Notification } from './useNotifications';\nexport { useChat } from './useChat';\nexport type { ChatMessage } from './useChat';\nexport { useReactions, REACTION_LABELS } from './useReactions';\nexport type { ReactionType, ReactionCount } from './useReactions';\nexport { useConnections } from './useConnections';\nexport type { Connection } from './useConnections';\nexport { useProfileVisits } from './useProfileVisits';\nexport type { ProfileVisit } from './useProfileVisits';\nexport { useTestimonials } from './useTestimonials';\nexport type { Testimonial } from './useTestimonials';\nexport { useReports, REPORT_TYPE_LABELS } from './useReports';\nexport type { ReportType } from './useReports';\nexport { useDailyChallenge } from './useDailyChallenge';\nexport type { DailyChallenge, DailyCheckin } from './useDailyChallenge';\nexport { usePrivateMessages } from './usePrivateMessages';\nexport type { PrivateMessage, Conversation } from './usePrivateMessages';\n\n// ── v1.1: Seguranca e utilitarios ──\nexport {\n  sanitizeHTML,\n  stripHTML,\n  sanitizePostContent,\n  cleanTextInput,\n  isValidEmail,\n  isValidWhatsApp,\n  formatWhatsApp,\n  validatePassword,\n  isAllowedURL,\n  isValidURL,\n  validateImageFile,\n  checkRateLimit,\n  RATE_LIMITS,\n  logSecurityEvent,\n  maskEmail,\n  maskWhatsApp,\n  SUPER_ADMIN_UUID,\n  CURRENT_TERMS_VERSION,\n  MIN_AGE,\n  MAX_LENGTHS,\n} from './security';\n\n// ── v1.1: Novos hooks para camadas estrategicas ──\nexport { useLiveQuestions } from './useLiveQuestions';\nexport type { LiveQuestion } from './useLiveQuestions';\nexport { useRitualLogs } from './useRitualLogs';\nexport type { RitualLog, RitualStats, RitualType as RitualLogType } from './useRitualLogs';\nexport { useBadges, useBadgesForUsers, BADGE_CONFIG, runBadgeEngine } from './useBadges';\nexport type { UserBadge, BadgeType } from './useBadges';\nexport { useModerationActions, ACTION_TYPE_LABELS } from './useModerationActions';\nexport type { ModerationAction, ModerationActionType } from './useModerationActions';\nexport { useMemberTestimonials } from './useMemberTestimonials';\nexport type { MemberTestimonial } from './useMemberTestimonials';\nexport { useInviteLinks } from './useInviteLinks';\nexport type { InviteLink } from './useInviteLinks';\n\n// ── Modal Context (React Router) ──\nexport { ModalProvider, useModalContext } from './ModalContext';"
+}

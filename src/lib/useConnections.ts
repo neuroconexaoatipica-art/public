@@ -1,58 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from './supabase';
-
-export interface Connection { id: string; requester_id: string; target_id: string; status: 'pending' | 'accepted' | 'rejected' | 'blocked'; created_at: string; other_user?: { id: string; name: string; profile_photo: string | null; role: string }; }
-
-export function useConnections() {
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [pendingReceived, setPendingReceived] = useState<Connection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setIsLoading(false); return; }
-      const { data, error } = await supabase.from('connections').select('*').or(`requester_id.eq.${user.id},target_id.eq.${user.id}`).order('created_at', { ascending: false });
-      if (error) throw error;
-      const otherIds = [...new Set((data || []).map((c: any) => c.requester_id === user.id ? c.target_id : c.requester_id))];
-      let usersMap: Record<string, any> = {};
-      if (otherIds.length > 0) { const { data: users } = await supabase.from('users').select('id,name,profile_photo,role').in('id', otherIds); (users || []).forEach((u: any) => { usersMap[u.id] = u; }); }
-      const enriched = (data || []).map((c: any) => { const otherId = c.requester_id === user.id ? c.target_id : c.requester_id; return { ...c, other_user: usersMap[otherId] || { id: otherId, name: 'Membro', profile_photo: null, role: 'member' } }; });
-      setConnections(enriched);
-      setPendingReceived(enriched.filter((c: any) => c.status === 'pending' && c.target_id === user.id));
-    } catch (err) { console.error('[useConnections] Erro:', err); } finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const sendRequest = useCallback(async (targetId: string) => {
-    try { const { data: { user } } = await supabase.auth.getUser(); if (!user) return { success: false, error: 'Nao autenticado' }; const { error } = await supabase.from('connections').insert({ requester_id: user.id, target_id: targetId }); if (error) throw error; await load(); return { success: true }; } catch (err: any) { return { success: false, error: err.message }; }
-  }, [load]);
-
-  const acceptRequest = useCallback(async (connectionId: string) => {
-    try { await supabase.from('connections').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', connectionId); await load(); return { success: true }; } catch (err: any) { return { success: false, error: err.message }; }
-  }, [load]);
-
-  const rejectRequest = useCallback(async (connectionId: string) => {
-    try { await supabase.from('connections').update({ status: 'rejected', updated_at: new Date().toISOString() }).eq('id', connectionId); await load(); return { success: true }; } catch (err: any) { return { success: false, error: err.message }; }
-  }, [load]);
-
-  const cancelRequest = useCallback(async (connectionId: string) => {
-    try { await supabase.from('connections').delete().eq('id', connectionId); await load(); return { success: true }; } catch (err: any) { return { success: false, error: err.message }; }
-  }, [load]);
-
-  const getConnectionStatus = useCallback(async (targetId: string): Promise<'none' | 'pending_sent' | 'pending_received' | 'accepted' | 'blocked'> => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 'none';
-      const { data } = await supabase.from('connections').select('*').or(`and(requester_id.eq.${user.id},target_id.eq.${targetId}),and(requester_id.eq.${targetId},target_id.eq.${user.id})`).limit(1).single();
-      if (!data) return 'none';
-      if (data.status === 'accepted') return 'accepted';
-      if (data.status === 'blocked') return 'blocked';
-      if (data.requester_id === user.id) return 'pending_sent';
-      return 'pending_received';
-    } catch { return 'none'; }
-  }, []);
-
-  return { connections, pendingReceived, isLoading, sendRequest, acceptRequest, rejectRequest, cancelRequest, getConnectionStatus, refresh: load };
+{
+  "lote": 0,
+  "status": "pending",
+  "file_path": "src/lib/useConnections.ts",
+  "created_at": "2026-02-27T05:36:04.684Z",
+  "file_content": "import { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\n\nexport interface Connection {\n  id: string;\n  requester_id: string;\n  target_id: string;\n  status: 'pending' | 'accepted' | 'rejected' | 'blocked';\n  created_at: string;\n  other_user?: { id: string; name: string; display_name?: string; profile_photo: string | null; role: string };\n}\n\nexport function useConnections() {\n  const [connections, setConnections] = useState<Connection[]>([]);\n  const [pendingReceived, setPendingReceived] = useState<Connection[]>([]);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const load = useCallback(async () => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) { setIsLoading(false); return; }\n\n      const { data, error } = await supabase\n        .from('connections')\n        .select('*')\n        .or(`requester_id.eq.${user.id},target_id.eq.${user.id}`)\n        .order('created_at', { ascending: false });\n\n      if (error) throw error;\n\n      // Enriquecer com dados do outro usuario\n      const otherIds = [...new Set((data || []).map(c =>\n        c.requester_id === user.id ? c.target_id : c.requester_id\n      ))];\n\n      let usersMap: Record<string, any> = {};\n      if (otherIds.length > 0) {\n        const { data: users } = await supabase\n          .from('users').select('id, name, display_name, profile_photo, role').in('id', otherIds);\n        (users || []).forEach(u => { usersMap[u.id] = u; });\n      }\n\n      const enriched = (data || []).map(c => {\n        const otherId = c.requester_id === user.id ? c.target_id : c.requester_id;\n        return { ...c, other_user: usersMap[otherId] || { id: otherId, name: 'Membro', profile_photo: null, role: 'member' } };\n      });\n\n      setConnections(enriched);\n      setPendingReceived(enriched.filter(c => c.status === 'pending' && c.target_id === user.id));\n    } catch (err) {\n      console.error('[useConnections] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => { load(); }, [load]);\n\n  const sendRequest = useCallback(async (targetId: string) => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n      const { error } = await supabase.from('connections').insert({ requester_id: user.id, target_id: targetId });\n      if (error) throw error;\n      await load();\n      return { success: true };\n    } catch (err: any) { return { success: false, error: err.message }; }\n  }, [load]);\n\n  const acceptRequest = useCallback(async (connectionId: string) => {\n    try {\n      await supabase.from('connections').update({ status: 'accepted', updated_at: new Date().toISOString() }).eq('id', connectionId);\n      await load();\n      return { success: true };\n    } catch (err: any) { return { success: false, error: err.message }; }\n  }, [load]);\n\n  const rejectRequest = useCallback(async (connectionId: string) => {\n    try {\n      await supabase.from('connections').update({ status: 'rejected', updated_at: new Date().toISOString() }).eq('id', connectionId);\n      await load();\n      return { success: true };\n    } catch (err: any) { return { success: false, error: err.message }; }\n  }, [load]);\n\n  const cancelRequest = useCallback(async (connectionId: string) => {\n    try {\n      await supabase.from('connections').delete().eq('id', connectionId);\n      await load();\n      return { success: true };\n    } catch (err: any) { return { success: false, error: err.message }; }\n  }, [load]);\n\n  const getConnectionStatus = useCallback(async (targetId: string): Promise<'none' | 'pending_sent' | 'pending_received' | 'accepted' | 'blocked'> => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return 'none';\n      const { data } = await supabase\n        .from('connections')\n        .select('*')\n        .or(`and(requester_id.eq.${user.id},target_id.eq.${targetId}),and(requester_id.eq.${targetId},target_id.eq.${user.id})`)\n        .limit(1)\n        .single();\n      if (!data) return 'none';\n      if (data.status === 'accepted') return 'accepted';\n      if (data.status === 'blocked') return 'blocked';\n      if (data.requester_id === user.id) return 'pending_sent';\n      return 'pending_received';\n    } catch { return 'none'; }\n  }, []);\n\n  return { connections, pendingReceived, isLoading, sendRequest, acceptRequest, rejectRequest, cancelRequest, getConnectionStatus, refresh: load };\n}"
 }

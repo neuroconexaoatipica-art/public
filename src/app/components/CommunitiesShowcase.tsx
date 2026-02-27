@@ -1,70 +1,7 @@
-import { motion } from "motion/react";
-import { Crown, Search, Users, ShieldCheck } from "lucide-react";
-import { COMMUNITIES_CONFIG, useCommunitiesContext } from "../../lib";
-
-const FALLBACK_MILA = ["Mentes em Tensao", "Sexo, Desejo & Vinculo", "Networking Atipico", "Lab de Criacao"];
-
-export function CommunitiesShowcase() {
-  const { communities: dbCommunities } = useCommunitiesContext();
-  const dbMap: Record<string, { owner_id: string | null; needs_moderator: boolean }> = {};
-  dbCommunities.forEach(c => { dbMap[c.name] = { owner_id: c.owner_id, needs_moderator: c.needs_moderator }; });
-  const founderCount = dbCommunities.filter(c => c.needs_moderator && !c.owner_id).length;
-
-  return (
-    <section className="w-full py-16 md:py-24 lg:py-28 relative overflow-hidden" style={{ background: "#C8C8C8" }}>
-      <div className="relative mx-auto max-w-[1200px] px-6 lg:px-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#0A8F85]/10 border border-[#0A8F85]/20 rounded-full mb-6">
-            <Users className="h-4 w-4 text-[#0A8F85]" />
-            <span className="text-sm text-[#0A8F85] tracking-wide uppercase" style={{ fontWeight: 600 }}>Comunidades</span>
-          </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl mb-4 text-[#1A1A1A]" style={{ fontWeight: 600 }}>14 comunidades para quem nao cabe em lugares comuns</h2>
-          <p className="text-lg text-[#666] max-w-2xl mx-auto">Cada comunidade tem manifesto, ritual e vida propria.</p>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.15 }} className="max-w-2xl mx-auto mb-12">
-          <motion.div animate={{ borderColor: ["rgba(200,16,46,0.2)", "rgba(200,16,46,0.5)", "rgba(200,16,46,0.2)"] }} transition={{ duration: 3, repeat: Infinity }} className="bg-white border-2 border-[#C8102E]/20 rounded-2xl p-5 text-center shadow-sm">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <motion.div animate={{ rotate: [0, -10, 10, 0] }} transition={{ duration: 2, repeat: Infinity }}><Crown className="h-6 w-6 text-[#C8102E]" /></motion.div>
-              <span className="text-lg text-[#C8102E] uppercase tracking-wider" style={{ fontWeight: 800 }}>Procura-se Founders</span>
-              <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity }}><Crown className="h-6 w-6 text-[#C8102E]" /></motion.div>
-            </div>
-            <p className="text-[#555] text-sm mb-2"><span className="text-[#1A1A1A]" style={{ fontWeight: 600 }}>{founderCount} comunidades</span> precisam de um Founder.</p>
-            <p className="text-[#0A8F85] text-sm" style={{ fontWeight: 600 }}>Candidate-se apos o cadastro. Acesso vitalicio para founders aprovados.</p>
-          </motion.div>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
-          {COMMUNITIES_CONFIG.map((community, index) => {
-            const IconComponent = community.icon;
-            const dbData = dbMap[community.name];
-            const isMila = dbData ? !!dbData.owner_id : FALLBACK_MILA.includes(community.name);
-            const seekingFounder = dbData ? (dbData.needs_moderator && !dbData.owner_id) : !FALLBACK_MILA.includes(community.name);
-
-            return (
-              <motion.div key={community.name} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-30px" }} transition={{ duration: 0.4, delay: index * 0.04 }} whileHover={{ y: -4, scale: 1.01 }} className={`group relative bg-white border-2 rounded-2xl p-5 transition-all duration-300 hover:shadow-lg cursor-default ${seekingFounder ? "border-[#C8102E]/15 hover:border-[#C8102E]/30" : "border-transparent hover:border-[#81D8D0]/30"}`}>
-                <div className="absolute top-0 left-0 w-1 h-0 rounded-r-full group-hover:h-full transition-all duration-300" style={{ backgroundColor: community.color }} />
-                <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-                  {isMila && (<div className="flex items-center gap-1 px-2 py-1 bg-[#81D8D0]/15 border border-[#81D8D0]/30 rounded-full"><ShieldCheck className="h-3 w-3 text-[#0A8F85]" /><span className="text-[10px] text-[#0A8F85] uppercase tracking-wider" style={{ fontWeight: 700 }}>Mila</span></div>)}
-                  {seekingFounder && (<motion.div animate={{ boxShadow: ["0 0 0 rgba(200,16,46,0)", "0 0 10px rgba(200,16,46,0.2)", "0 0 0 rgba(200,16,46,0)"] }} transition={{ duration: 2, repeat: Infinity }} className="flex items-center gap-1 px-2.5 py-1 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-full"><Search className="h-3 w-3 text-[#C8102E]" /><span className="text-[10px] text-[#C8102E] uppercase tracking-wider" style={{ fontWeight: 700 }}>Procura Founder</span></motion.div>)}
-                </div>
-                <div className="relative">
-                  <div className="flex items-center gap-3 mb-3 pr-24">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${community.color}15`, border: `1px solid ${community.color}30` }}>
-                      <IconComponent className="h-5 w-5" style={{ color: community.color }} />
-                    </div>
-                    <h3 className="text-base text-[#1A1A1A] group-hover:text-[#0A8F85] transition-colors" style={{ fontWeight: 600 }}>{community.name}</h3>
-                  </div>
-                  <p className="text-sm text-[#666] leading-relaxed">{community.description}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-        <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-center mt-10">
-          <p className="text-[#999] text-sm">Sem algoritmo. Sem ranking. Sem feed infinito.{" "}<span className="text-[#666]" style={{ fontWeight: 500 }}>O ritual e o motor.</span></p>
-        </motion.div>
-      </div>
-    </section>
-  );
+{
+  "lote": 1,
+  "status": "pending",
+  "file_path": "src/app/components/CommunitiesShowcase.tsx",
+  "created_at": "2026-02-27T05:36:11.273Z",
+  "file_content": "import { motion } from \"motion/react\";\nimport { Crown, Search, Users, ShieldCheck } from \"lucide-react\";\nimport { COMMUNITIES_CONFIG, useCommunitiesContext } from \"../../lib\";\nimport { MILA_ACTIVE_COMMUNITIES } from \"../../lib/communitiesConfig\";\n\nexport function CommunitiesShowcase() {\n  // Dados do banco — owner_id e needs_moderator vem do Supabase\n  const { communities: dbCommunities } = useCommunitiesContext();\n\n  // Mapa nome -> dados do banco para enriquecer os cards\n  const dbMap: Record<string, { owner_id: string | null; needs_moderator: boolean }> = {};\n  dbCommunities.forEach(c => {\n    dbMap[c.name] = { owner_id: c.owner_id, needs_moderator: c.needs_moderator };\n  });\n\n  // Contar quantas comunidades precisam de founder — EXCLUINDO as 4 da Mila\n  const founderCount = COMMUNITIES_CONFIG.filter(c =>\n    !MILA_ACTIVE_COMMUNITIES.includes(c.name)\n  ).length;\n\n  return (\n    <section className=\"w-full py-16 md:py-24 lg:py-28 relative overflow-hidden\" style={{ background: \"#C8C8C8\" }}>\n      <div className=\"relative mx-auto max-w-[1200px] px-6 lg:px-8\">\n        {/* Header */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.5 }}\n          className=\"text-center mb-6\"\n        >\n          <div className=\"inline-flex items-center gap-2 px-4 py-2 bg-[#0A8F85]/10 border border-[#0A8F85]/20 rounded-full mb-6\">\n            <Users className=\"h-4 w-4 text-[#0A8F85]\" />\n            <span className=\"text-sm text-[#0A8F85] tracking-wide uppercase\" style={{ fontWeight: 600 }}>\n              Comunidades\n            </span>\n          </div>\n\n          <h2 className=\"text-3xl md:text-4xl lg:text-5xl mb-4 text-[#1A1A1A]\" style={{ fontWeight: 600 }}>\n            {dbCommunities.length > 0 ? dbCommunities.length : 14} comunidades para quem não cabe em lugares comuns\n          </h2>\n          <p className=\"text-lg text-[#666] max-w-2xl mx-auto\">\n            Cada comunidade tem manifesto, ritual e vida própria — como no Orkut, mas com profundidade.\n          </p>\n        </motion.div>\n\n        {/* PROCURA-SE FOUNDER — BANNER */}\n        <motion.div\n          initial={{ opacity: 0, y: 10 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.5, delay: 0.15 }}\n          className=\"max-w-2xl mx-auto mb-12\"\n        >\n          <motion.div\n            animate={{ borderColor: [\"rgba(200,16,46,0.2)\", \"rgba(200,16,46,0.5)\", \"rgba(200,16,46,0.2)\"] }}\n            transition={{ duration: 3, repeat: Infinity }}\n            className=\"bg-white border-2 border-[#C8102E]/20 rounded-2xl p-5 text-center shadow-sm\"\n          >\n            <div className=\"flex items-center justify-center gap-3 mb-2\">\n              <motion.div animate={{ rotate: [0, -10, 10, 0] }} transition={{ duration: 2, repeat: Infinity }}>\n                <Crown className=\"h-6 w-6 text-[#C8102E]\" />\n              </motion.div>\n              <span className=\"text-lg text-[#C8102E] uppercase tracking-wider\" style={{ fontWeight: 800 }}>\n                Procura-se Founders\n              </span>\n              <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity }}>\n                <Crown className=\"h-6 w-6 text-[#C8102E]\" />\n              </motion.div>\n            </div>\n            <p className=\"text-[#555] text-sm mb-2\">\n              <span className=\"text-[#1A1A1A]\" style={{ fontWeight: 600 }}>{founderCount} comunidades</span> precisam de um Founder — alguém que dê vida ao espaço, crie rituais e conduza conversas.\n            </p>\n            <p className=\"text-[#0A8F85] text-sm\" style={{ fontWeight: 600 }}>\n              Candidate-se após o cadastro. Acesso vitalício para founders aprovados.\n            </p>\n          </motion.div>\n        </motion.div>\n\n        {/* Grid */}\n        <div className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto\">\n          {COMMUNITIES_CONFIG.map((community, index) => {\n            const IconComponent = community.icon;\n            // REGRA: se está em MILA_ACTIVE_COMMUNITIES, é da Mila. Ponto.\n            const isMila = MILA_ACTIVE_COMMUNITIES.includes(community.name);\n            const seekingFounder = !isMila;\n\n            return (\n              <motion.div\n                key={community.name}\n                initial={{ opacity: 0, y: 30 }}\n                whileInView={{ opacity: 1, y: 0 }}\n                viewport={{ once: true, margin: \"-30px\" }}\n                transition={{ duration: 0.4, delay: index * 0.04 }}\n                whileHover={{ y: -4, scale: 1.01 }}\n                className={`group relative bg-white border-2 rounded-2xl p-5 transition-all duration-300 hover:shadow-lg cursor-default ${\n                  seekingFounder ? \"border-[#C8102E]/15 hover:border-[#C8102E]/30\" : \"border-transparent hover:border-[#81D8D0]/30\"\n                }`}\n              >\n                {/* Barra decorativa */}\n                <div\n                  className=\"absolute top-0 left-0 w-1 h-0 rounded-r-full group-hover:h-full transition-all duration-300\"\n                  style={{ backgroundColor: community.color }}\n                />\n\n                {/* Badges */}\n                <div className=\"absolute top-3 right-3 flex flex-col gap-1.5 items-end\">\n                  {isMila && (\n                    <div className=\"flex items-center gap-1 px-2 py-1 bg-[#81D8D0]/15 border border-[#81D8D0]/30 rounded-full\">\n                      <ShieldCheck className=\"h-3 w-3 text-[#0A8F85]\" />\n                      <span className=\"text-[10px] text-[#0A8F85] uppercase tracking-wider\" style={{ fontWeight: 700 }}>\n                        Aberta — Mila\n                      </span>\n                    </div>\n                  )}\n                  {seekingFounder && (\n                    <motion.div\n                      animate={{ boxShadow: [\"0 0 0 rgba(200,16,46,0)\", \"0 0 10px rgba(200,16,46,0.2)\", \"0 0 0 rgba(200,16,46,0)\"] }}\n                      transition={{ duration: 2, repeat: Infinity }}\n                      className=\"flex items-center gap-1 px-2.5 py-1 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-full\"\n                    >\n                      <Search className=\"h-3 w-3 text-[#C8102E]\" />\n                      <span className=\"text-[10px] text-[#C8102E] uppercase tracking-wider\" style={{ fontWeight: 700 }}>\n                        Procura Founder\n                      </span>\n                    </motion.div>\n                  )}\n                </div>\n\n                <div className=\"relative\">\n                  <div className=\"flex items-center gap-3 mb-3 pr-24\">\n                    <div\n                      className=\"w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0\"\n                      style={{ backgroundColor: `${community.color}15`, border: `1px solid ${community.color}30` }}\n                    >\n                      <IconComponent className=\"h-5 w-5\" style={{ color: community.color }} />\n                    </div>\n                    <h3 className=\"text-base text-[#1A1A1A] group-hover:text-[#0A8F85] transition-colors\" style={{ fontWeight: 600 }}>\n                      {community.name}\n                    </h3>\n                  </div>\n                  <p className=\"text-sm text-[#666] leading-relaxed\">\n                    {community.description}\n                  </p>\n                </div>\n              </motion.div>\n            );\n          })}\n        </div>\n\n        <motion.div\n          initial={{ opacity: 0 }}\n          whileInView={{ opacity: 1 }}\n          viewport={{ once: true }}\n          className=\"text-center mt-10\"\n        >\n          <p className=\"text-[#999] text-sm\">\n            Sem algoritmo. Sem ranking. Sem feed infinito.{\" \"}\n            <span className=\"text-[#666]\" style={{ fontWeight: 500 }}>O ritual é o motor.</span>\n          </p>\n        </motion.div>\n      </div>\n    </section>\n  );\n}"
 }

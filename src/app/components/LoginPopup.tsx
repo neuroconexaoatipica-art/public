@@ -1,59 +1,7 @@
-import { useState } from 'react';
-import { supabase } from '../../lib/supabase';
-
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-  onSwitchToSignup: () => void;
-  onLoginSuccess?: () => void;
-}
-
-export function LoginPopup({ isOpen, onClose, onSwitchToSignup, onLoginSuccess }: Props) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  if (!isOpen) return null;
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password) return;
-    setLoading(true); setError('');
-    try {
-      const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (err) throw err;
-      onLoginSuccess?.();
-    } catch (err: any) {
-      setError(err.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : err.message || 'Erro ao entrar.');
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={e => e.stopPropagation()}>
-        <h2 className="text-2xl font-semibold mb-1 text-[#1a1a1a]">Entrar</h2>
-        <p className="text-[#666] text-sm mb-6">Bem-vindo(a) de volta ao NeuroConexao.</p>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="text-sm text-[#666] mb-1 block">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required className="w-full border border-[#ddd] rounded-xl px-4 py-3 focus:outline-none focus:border-[#81D8D0]" />
-          </div>
-          <div>
-            <label className="text-sm text-[#666] mb-1 block">Senha</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Sua senha" required className="w-full border border-[#ddd] rounded-xl px-4 py-3 focus:outline-none focus:border-[#81D8D0]" />
-          </div>
-          {error && <p className="text-[#C8102E] text-sm">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full py-3 bg-[#81D8D0] text-black rounded-xl font-bold disabled:opacity-50">
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
-        <div className="mt-4 text-center">
-          <span className="text-[#999] text-sm">Nao tem conta? </span>
-          <button onClick={onSwitchToSignup} className="text-[#C8102E] text-sm font-semibold hover:underline">Criar conta</button>
-        </div>
-        <button onClick={onClose} className="absolute top-4 right-4 text-[#999] hover:text-[#333] text-xl hidden">✕</button>
-      </div>
-    </div>
-  );
+{
+  "lote": 2,
+  "status": "pending",
+  "file_path": "src/app/components/LoginPopup.tsx",
+  "created_at": "2026-02-27T05:36:16.106Z",
+  "file_content": "import { useState } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { X, AlertCircle, Loader2 } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\ninterface LoginPopupProps {\n  isOpen: boolean;\n  onClose: () => void;\n  onSwitchToSignup: () => void;\n  onLoginSuccess?: () => void;\n}\n\nexport function LoginPopup({ isOpen, onClose, onSwitchToSignup, onLoginSuccess }: LoginPopupProps) {\n  const [email, setEmail] = useState(\"\");\n  const [password, setPassword] = useState(\"\");\n  const [isLoading, setIsLoading] = useState(false);\n  const [error, setError] = useState(\"\");\n\n  const handleSubmit = async (e: React.FormEvent) => {\n    e.preventDefault();\n    setError(\"\");\n    setIsLoading(true);\n\n    try {\n      // Login no Supabase Auth\n      const { data, error: authError } = await supabase.auth.signInWithPassword({\n        email,\n        password,\n      });\n\n      if (authError) {\n        throw authError;\n      }\n\n      if (!data.user) {\n        throw new Error(\"Erro ao fazer login\");\n      }\n\n      // Sucesso!\n      setIsLoading(false);\n      onClose();\n      \n      // Resetar formulário\n      setEmail(\"\");\n      setPassword(\"\");\n      \n      // Chamar callback de sucesso\n      if (onLoginSuccess) {\n        onLoginSuccess();\n      }\n\n    } catch (err: any) {\n      setIsLoading(false);\n      \n      // Tratar erros comuns\n      if (err.message.includes(\"Invalid login credentials\")) {\n        setError(\"Email ou senha incorretos. Tente novamente.\");\n      } else if (err.message.includes(\"Email not confirmed\")) {\n        setError(\"Confirme seu email antes de fazer login.\");\n      } else {\n        setError(err.message || \"Erro ao fazer login. Tente novamente.\");\n      }\n    }\n  };\n\n  return (\n    <AnimatePresence>\n      {isOpen && (\n        <motion.div\n          initial={{ opacity: 0 }}\n          animate={{ opacity: 1 }}\n          exit={{ opacity: 0 }}\n          transition={{ duration: 0.2 }}\n          className=\"fixed inset-0 z-50 flex items-center justify-center bg-[#35363A]/90 backdrop-blur-sm\"\n          onClick={onClose}\n        >\n          <motion.div\n            initial={{ opacity: 0, scale: 0.95, y: 20 }}\n            animate={{ opacity: 1, scale: 1, y: 0 }}\n            exit={{ opacity: 0, scale: 0.95, y: 20 }}\n            transition={{ duration: 0.3, ease: \"easeOut\" }}\n            onClick={(e) => e.stopPropagation()}\n            className=\"relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl p-8 md:p-10 border-2 border-[#81D8D0]/20\"\n          >\n            {/* Botão Fechar */}\n            <button\n              onClick={onClose}\n              className=\"absolute top-4 right-4 p-2 hover:bg-[#35363A]/5 rounded-lg transition-colors\"\n            >\n              <X className=\"h-5 w-5 text-[#35363A]/60\" />\n            </button>\n\n            {/* Título */}\n            <h2 className=\"text-3xl md:text-4xl font-semibold mb-2 text-[#35363A]\">Entrar</h2>\n            <p className=\"text-sm text-[#35363A]/70 mb-8 font-normal\">\n              Bem-vindo(a) de volta.\n            </p>\n\n            {/* Formulário */}\n            <form onSubmit={handleSubmit} className=\"space-y-5\">\n              {/* Email */}\n              <div>\n                <input\n                  type=\"email\"\n                  value={email}\n                  onChange={(e) => setEmail(e.target.value)}\n                  placeholder=\"Digite seu e-mail\"\n                  required\n                  disabled={isLoading}\n                  className=\"w-full px-4 py-3.5 border-2 border-[#35363A]/15 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all text-base text-[#35363A] bg-white placeholder:text-[#35363A]/40 disabled:opacity-50\"\n                />\n              </div>\n\n              {/* Senha */}\n              <div>\n                <input\n                  type=\"password\"\n                  value={password}\n                  onChange={(e) => setPassword(e.target.value)}\n                  placeholder=\"Digite sua senha\"\n                  required\n                  disabled={isLoading}\n                  className=\"w-full px-4 py-3.5 border-2 border-[#35363A]/15 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent transition-all text-base text-[#35363A] bg-white placeholder:text-[#35363A]/40 disabled:opacity-50\"\n                />\n              </div>\n\n              {/* Erro */}\n              <AnimatePresence>\n                {error && (\n                  <motion.div\n                    initial={{ opacity: 0, height: 0 }}\n                    animate={{ opacity: 1, height: \"auto\" }}\n                    exit={{ opacity: 0, height: 0 }}\n                    transition={{ duration: 0.2 }}\n                    className=\"flex items-start gap-2 p-3 bg-[#C8102E]/10 border-2 border-[#C8102E]/30 rounded-xl overflow-hidden\"\n                  >\n                    <AlertCircle className=\"h-5 w-5 text-[#C8102E] flex-shrink-0 mt-0.5\" />\n                    <p className=\"text-sm text-[#C8102E] font-semibold\">\n                      {error}\n                    </p>\n                  </motion.div>\n                )}\n              </AnimatePresence>\n\n              {/* Botão Submit */}\n              <motion.button\n                type=\"submit\"\n                whileHover={!isLoading ? { scale: 1.02 } : {}}\n                whileTap={!isLoading ? { scale: 0.98 } : {}}\n                disabled={isLoading}\n                className=\"w-full py-3.5 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-all font-bold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2\"\n              >\n                {isLoading ? (\n                  <>\n                    <Loader2 className=\"h-5 w-5 animate-spin\" />\n                    Entrando...\n                  </>\n                ) : (\n                  \"Entrar\"\n                )}\n              </motion.button>\n            </form>\n\n            {/* Link para Cadastro */}\n            <div className=\"mt-6 text-center\">\n              <p className=\"text-sm text-[#35363A]/70\">\n                Ainda não tem conta?{\" \"}\n                <button\n                  onClick={onSwitchToSignup}\n                  className=\"text-[#C8102E] font-bold hover:underline\"\n                >\n                  Cadastrar\n                </button>\n              </p>\n            </div>\n          </motion.div>\n        </motion.div>\n      )}\n    </AnimatePresence>\n  );\n}\n"
 }
