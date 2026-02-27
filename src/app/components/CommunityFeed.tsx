@@ -1,7 +1,264 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/CommunityFeed.tsx",
-  "created_at": "2026-02-27T05:36:19.979Z",
-  "file_content": "import { useState } from \"react\";\nimport { motion } from \"motion/react\";\nimport { ArrowLeft, PlusCircle, Users, MessageCircle } from \"lucide-react\";\nimport { usePosts, useProfileContext, hasAppAccess, hasModAccess } from \"../../lib\";\nimport type { CommunityWithMeta } from \"../../lib\";\nimport { PostCard } from \"./PostCard\";\nimport { CreatePostModal } from \"./CreatePostModal\";\nimport { MessageSquarePlus, Sparkles } from \"lucide-react\";\n\ninterface CommunityFeedProps {\n  community: CommunityWithMeta;\n  onBack: () => void;\n  onNavigateToProfile: (userId: string) => void;\n}\n\nexport function CommunityFeed({ community, onBack, onNavigateToProfile }: CommunityFeedProps) {\n  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);\n  const { user } = useProfileContext();\n  const canPost = hasAppAccess(user?.role);\n  const canModerate = hasModAccess(user?.role);\n\n  const isRealCommunity = !community.id.startsWith('pending-') && !community.id.startsWith('local-');\n\n  const { posts, isLoading, isLoadingMore, hasMore, loadMore, refreshPosts } = usePosts(\n    isRealCommunity ? { communityId: community.id } : {}\n  );\n\n  // Ordenar: fixados primeiro, depois por data\n  const sortedPosts = [...posts].sort((a, b) => {\n    if (a.is_pinned && !b.is_pinned) return -1;\n    if (!a.is_pinned && b.is_pinned) return 1;\n    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();\n  });\n\n  const IconComponent = community.config.icon;\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Header */}\n      <div className=\"w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40\">\n        <div className=\"mx-auto max-w-[1000px] px-6 py-4\">\n          <div className=\"flex items-center justify-between\">\n            <button\n              onClick={onBack}\n              className=\"flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors\"\n            >\n              <ArrowLeft className=\"h-5 w-5\" />\n              <span className=\"font-medium\">Comunidades</span>\n            </button>\n\n            <div className=\"flex items-center gap-2\">\n              <IconComponent className=\"h-6 w-6\" style={{ color: community.config.color }} />\n              <h1 className=\"text-xl font-semibold text-white\">{community.name}</h1>\n            </div>\n\n            <div className=\"w-24\"></div>\n          </div>\n        </div>\n      </div>\n\n      <div className=\"mx-auto max-w-[1000px] px-6 py-8\">\n        {/* Community Header Card */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          animate={{ opacity: 1, y: 0 }}\n          transition={{ duration: 0.5 }}\n          className=\"mb-8\"\n        >\n          <div\n            className=\"border-2 rounded-2xl p-8 relative overflow-hidden\"\n            style={{\n              borderColor: `${community.config.color}40`,\n              background: `linear-gradient(135deg, ${community.config.color}15, transparent)`\n            }}\n          >\n            {/* Icon grande */}\n            <div\n              className=\"w-16 h-16 rounded-xl flex items-center justify-center mb-4\"\n              style={{ backgroundColor: `${community.config.color}20`, border: `2px solid ${community.config.color}40` }}\n            >\n              <IconComponent className=\"h-8 w-8\" style={{ color: community.config.color }} />\n            </div>\n\n            <h2 className=\"text-3xl font-semibold text-white mb-3\">\n              {community.name}\n            </h2>\n            <p className=\"text-lg text-white/80 font-normal leading-relaxed mb-6 max-w-2xl\">\n              {community.description}\n            </p>\n\n            {/* Stats */}\n            <div className=\"flex items-center gap-6 mb-6\">\n              <div className=\"flex items-center gap-2 text-white/70\">\n                <MessageCircle className=\"h-5 w-5\" style={{ color: community.config.color }} />\n                <span className=\"font-medium\">{community.postCount} posts</span>\n              </div>\n            </div>\n\n            {/* Botão Criar Post */}\n            {isRealCommunity && user && canPost && (\n              <button\n                onClick={() => setIsCreatePostOpen(true)}\n                className=\"inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02]\"\n                style={{\n                  backgroundColor: community.config.color,\n                  color: '#000'\n                }}\n              >\n                <PlusCircle className=\"h-5 w-5\" />\n                Criar post nesta comunidade\n              </button>\n            )}\n\n            {!isRealCommunity && (\n              <div className=\"px-4 py-3 bg-white/5 border border-white/10 rounded-xl inline-block\">\n                <p className=\"text-sm text-white/60\">\n                  Esta comunidade será ativada em breve. Fique atento(a)!\n                </p>\n              </div>\n            )}\n          </div>\n        </motion.div>\n\n        {/* Feed de Posts da Comunidade */}\n        <div>\n          <h3 className=\"text-xl font-semibold text-white mb-6\">Posts da Comunidade</h3>\n\n          <div className=\"space-y-6\">\n            {isLoading ? (\n              <div className=\"text-center py-12\">\n                <div className=\"w-12 h-12 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4\"></div>\n                <p className=\"text-white/60\">Carregando posts...</p>\n              </div>\n            ) : sortedPosts.length === 0 ? (\n              <div className=\"space-y-6\">\n                {/* Empty State Principal */}\n                <div \n                  className=\"border-2 rounded-2xl p-8 md:p-10 text-center\"\n                  style={{\n                    borderColor: `${community.config.color}30`,\n                    background: `linear-gradient(180deg, ${community.config.color}08, transparent)`\n                  }}\n                >\n                  <div \n                    className=\"w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-5\"\n                    style={{ backgroundColor: `${community.config.color}20` }}\n                  >\n                    <IconComponent className=\"h-8 w-8\" style={{ color: community.config.color }} />\n                  </div>\n                  <h3 className=\"text-2xl font-semibold text-white mb-3\">\n                    {isRealCommunity ? 'Esta conversa está esperando por você' : 'Comunidade em preparação'}\n                  </h3>\n                  <p className=\"text-base text-white/60 mb-6 max-w-lg mx-auto\">\n                    {isRealCommunity \n                      ? 'Nenhum post ainda. As melhores comunidades começam com uma pessoa que decide falar primeiro.'\n                      : 'Em breve esta comunidade estará ativa. Fique atento(a)!'\n                    }\n                  </p>\n                  {isRealCommunity && user && canPost && (\n                    <button\n                      onClick={() => setIsCreatePostOpen(true)}\n                      className=\"inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold transition-all hover:scale-[1.02] text-lg\"\n                      style={{\n                        backgroundColor: community.config.color,\n                        color: '#fff'\n                      }}\n                    >\n                      <MessageSquarePlus className=\"h-5 w-5\" />\n                      Iniciar a conversa\n                    </button>\n                  )}\n                </div>\n\n                {/* Conversation Starters */}\n                {community.config.starters && community.config.starters.length > 0 && (\n                  <div className=\"bg-white/3 border border-white/10 rounded-2xl p-6 md:p-8\">\n                    <div className=\"flex items-center gap-3 mb-5\">\n                      <Sparkles className=\"h-5 w-5\" style={{ color: community.config.color }} />\n                      <h4 className=\"text-lg font-semibold text-white\">\n                        Sugestões para começar\n                      </h4>\n                    </div>\n                    <div className=\"space-y-3\">\n                      {community.config.starters.map((starter, idx) => (\n                        <button\n                          key={idx}\n                          onClick={() => {\n                            if (canPost) setIsCreatePostOpen(true);\n                          }}\n                          className={`w-full text-left p-4 rounded-xl border transition-all group ${\n                            canPost \n                              ? 'border-white/10 hover:border-white/20 hover:bg-white/5 cursor-pointer' \n                              : 'border-white/5 cursor-default'\n                          }`}\n                        >\n                          <div className=\"flex items-start gap-3\">\n                            <span \n                              className=\"w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5\"\n                              style={{ \n                                backgroundColor: `${community.config.color}20`,\n                                color: community.config.color\n                              }}\n                            >\n                              {idx + 1}\n                            </span>\n                            <p className=\"text-white/80 text-base leading-relaxed group-hover:text-white transition-colors\">\n                              \"{starter}\"\n                            </p>\n                          </div>\n                        </button>\n                      ))}\n                    </div>\n                    <p className=\"text-xs text-white/30 mt-4 text-center\">\n                      Clique em uma sugestão para criar seu post\n                    </p>\n                  </div>\n                )}\n              </div>\n            ) : (\n              sortedPosts.map((post) => (\n                <PostCard\n                  key={post.id}\n                  post={post}\n                  currentUserId={user?.id}\n                  canModerate={canModerate}\n                  onDelete={refreshPosts}\n                  onPinToggle={refreshPosts}\n                  onAuthorClick={onNavigateToProfile}\n                  communityName={community.name}\n                />\n              ))\n            )}\n          </div>\n\n          {/* Botão para carregar mais posts */}\n          {hasMore && (\n            <button\n              onClick={loadMore}\n              className=\"block mx-auto mt-6 px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02]\"\n              style={{\n                backgroundColor: community.config.color,\n                color: '#000'\n              }}\n            >\n              {isLoadingMore ? (\n                <div className=\"w-5 h-5 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto\"></div>\n              ) : (\n                <span>Carregar mais posts</span>\n              )}\n            </button>\n          )}\n        </div>\n      </div>\n\n      {/* Modal de Criar Post */}\n      <CreatePostModal\n        isOpen={isCreatePostOpen}\n        onClose={() => setIsCreatePostOpen(false)}\n        onPostCreated={refreshPosts}\n        defaultCommunityId={isRealCommunity ? community.id : null}\n      />\n    </div>\n  );\n}"
+import { useState } from "react";
+import { motion } from "motion/react";
+import { ArrowLeft, PlusCircle, Users, MessageCircle } from "lucide-react";
+import { usePosts, useProfileContext, hasAppAccess, hasModAccess } from "../../lib";
+import type { CommunityWithMeta } from "../../lib";
+import { PostCard } from "./PostCard";
+import { CreatePostModal } from "./CreatePostModal";
+import { MessageSquarePlus, Sparkles } from "lucide-react";
+
+interface CommunityFeedProps {
+  community: CommunityWithMeta;
+  onBack: () => void;
+  onNavigateToProfile: (userId: string) => void;
+}
+
+export function CommunityFeed({ community, onBack, onNavigateToProfile }: CommunityFeedProps) {
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const { user } = useProfileContext();
+  const canPost = hasAppAccess(user?.role);
+  const canModerate = hasModAccess(user?.role);
+
+  const isRealCommunity = !community.id.startsWith('pending-') && !community.id.startsWith('local-');
+
+  const { posts, isLoading, isLoadingMore, hasMore, loadMore, refreshPosts } = usePosts(
+    isRealCommunity ? { communityId: community.id } : {}
+  );
+
+  // Ordenar: fixados primeiro, depois por data
+  const sortedPosts = [...posts].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1;
+    if (!a.is_pinned && b.is_pinned) return 1;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const IconComponent = community.config.icon;
+
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <div className="w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40">
+        <div className="mx-auto max-w-[1000px] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span className="font-medium">Comunidades</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <IconComponent className="h-6 w-6" style={{ color: community.config.color }} />
+              <h1 className="text-xl font-semibold text-white">{community.name}</h1>
+            </div>
+
+            <div className="w-24"></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-[1000px] px-6 py-8">
+        {/* Community Header Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <div
+            className="border-2 rounded-2xl p-8 relative overflow-hidden"
+            style={{
+              borderColor: `${community.config.color}40`,
+              background: `linear-gradient(135deg, ${community.config.color}15, transparent)`
+            }}
+          >
+            {/* Icon grande */}
+            <div
+              className="w-16 h-16 rounded-xl flex items-center justify-center mb-4"
+              style={{ backgroundColor: `${community.config.color}20`, border: `2px solid ${community.config.color}40` }}
+            >
+              <IconComponent className="h-8 w-8" style={{ color: community.config.color }} />
+            </div>
+
+            <h2 className="text-3xl font-semibold text-white mb-3">
+              {community.name}
+            </h2>
+            <p className="text-lg text-white/80 font-normal leading-relaxed mb-6 max-w-2xl">
+              {community.description}
+            </p>
+
+            {/* Stats */}
+            <div className="flex items-center gap-6 mb-6">
+              <div className="flex items-center gap-2 text-white/70">
+                <MessageCircle className="h-5 w-5" style={{ color: community.config.color }} />
+                <span className="font-medium">{community.postCount} posts</span>
+              </div>
+            </div>
+
+            {/* Botão Criar Post */}
+            {isRealCommunity && user && canPost && (
+              <button
+                onClick={() => setIsCreatePostOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
+                style={{
+                  backgroundColor: community.config.color,
+                  color: '#000'
+                }}
+              >
+                <PlusCircle className="h-5 w-5" />
+                Criar post nesta comunidade
+              </button>
+            )}
+
+            {!isRealCommunity && (
+              <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl inline-block">
+                <p className="text-sm text-white/60">
+                  Esta comunidade será ativada em breve. Fique atento(a)!
+                </p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Feed de Posts da Comunidade */}
+        <div>
+          <h3 className="text-xl font-semibold text-white mb-6">Posts da Comunidade</h3>
+
+          <div className="space-y-6">
+            {isLoading ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-white/60">Carregando posts...</p>
+              </div>
+            ) : sortedPosts.length === 0 ? (
+              <div className="space-y-6">
+                {/* Empty State Principal */}
+                <div 
+                  className="border-2 rounded-2xl p-8 md:p-10 text-center"
+                  style={{
+                    borderColor: `${community.config.color}30`,
+                    background: `linear-gradient(180deg, ${community.config.color}08, transparent)`
+                  }}
+                >
+                  <div 
+                    className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-5"
+                    style={{ backgroundColor: `${community.config.color}20` }}
+                  >
+                    <IconComponent className="h-8 w-8" style={{ color: community.config.color }} />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-white mb-3">
+                    {isRealCommunity ? 'Esta conversa está esperando por você' : 'Comunidade em preparação'}
+                  </h3>
+                  <p className="text-base text-white/60 mb-6 max-w-lg mx-auto">
+                    {isRealCommunity 
+                      ? 'Nenhum post ainda. As melhores comunidades começam com uma pessoa que decide falar primeiro.'
+                      : 'Em breve esta comunidade estará ativa. Fique atento(a)!'
+                    }
+                  </p>
+                  {isRealCommunity && user && canPost && (
+                    <button
+                      onClick={() => setIsCreatePostOpen(true)}
+                      className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold transition-all hover:scale-[1.02] text-lg"
+                      style={{
+                        backgroundColor: community.config.color,
+                        color: '#fff'
+                      }}
+                    >
+                      <MessageSquarePlus className="h-5 w-5" />
+                      Iniciar a conversa
+                    </button>
+                  )}
+                </div>
+
+                {/* Conversation Starters */}
+                {community.config.starters && community.config.starters.length > 0 && (
+                  <div className="bg-white/3 border border-white/10 rounded-2xl p-6 md:p-8">
+                    <div className="flex items-center gap-3 mb-5">
+                      <Sparkles className="h-5 w-5" style={{ color: community.config.color }} />
+                      <h4 className="text-lg font-semibold text-white">
+                        Sugestões para começar
+                      </h4>
+                    </div>
+                    <div className="space-y-3">
+                      {community.config.starters.map((starter, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (canPost) setIsCreatePostOpen(true);
+                          }}
+                          className={`w-full text-left p-4 rounded-xl border transition-all group ${
+                            canPost 
+                              ? 'border-white/10 hover:border-white/20 hover:bg-white/5 cursor-pointer' 
+                              : 'border-white/5 cursor-default'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span 
+                              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5"
+                              style={{ 
+                                backgroundColor: `${community.config.color}20`,
+                                color: community.config.color
+                              }}
+                            >
+                              {idx + 1}
+                            </span>
+                            <p className="text-white/80 text-base leading-relaxed group-hover:text-white transition-colors">
+                              "{starter}"
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-white/30 mt-4 text-center">
+                      Clique em uma sugestão para criar seu post
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              sortedPosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  currentUserId={user?.id}
+                  canModerate={canModerate}
+                  onDelete={refreshPosts}
+                  onPinToggle={refreshPosts}
+                  onAuthorClick={onNavigateToProfile}
+                  communityName={community.name}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Botão para carregar mais posts */}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              className="block mx-auto mt-6 px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
+              style={{
+                backgroundColor: community.config.color,
+                color: '#000'
+              }}
+            >
+              {isLoadingMore ? (
+                <div className="w-5 h-5 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto"></div>
+              ) : (
+                <span>Carregar mais posts</span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Modal de Criar Post */}
+      <CreatePostModal
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+        onPostCreated={refreshPosts}
+        defaultCommunityId={isRealCommunity ? community.id : null}
+      />
+    </div>
+  );
 }

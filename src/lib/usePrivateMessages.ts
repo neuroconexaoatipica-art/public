@@ -1,7 +1,187 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/usePrivateMessages.ts",
-  "created_at": "2026-02-27T05:36:07.129Z",
-  "file_content": "import { useState, useEffect, useCallback, useRef } from 'react';\nimport { supabase } from './supabase';\n\nexport interface PrivateMessage {\n  id: string;\n  sender_id: string;\n  receiver_id: string;\n  content: string;\n  is_read: boolean;\n  created_at: string;\n  sender_data?: { id: string; name: string; display_name?: string; profile_photo: string | null };\n}\n\nexport interface Conversation {\n  other_user_id: string;\n  other_user_name: string;\n  other_user_photo: string | null;\n  last_message: string;\n  last_message_at: string;\n  unread_count: number;\n}\n\nexport function usePrivateMessages(otherUserId?: string) {\n  const [messages, setMessages] = useState<PrivateMessage[]>([]);\n  const [conversations, setConversations] = useState<Conversation[]>([]);\n  const [isLoading, setIsLoading] = useState(true);\n  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);\n\n  // Carregar mensagens de uma conversa especifica\n  const loadMessages = useCallback(async () => {\n    if (!otherUserId) return;\n    try {\n      setIsLoading(true);\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return;\n\n      const { data, error } = await supabase\n        .from('private_messages')\n        .select('*')\n        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)\n        .order('created_at', { ascending: true })\n        .limit(200);\n\n      if (error) throw error;\n\n      // Marcar como lidas\n      if (data && data.length > 0) {\n        const unreadIds = data.filter(m => m.receiver_id === user.id && !m.is_read).map(m => m.id);\n        if (unreadIds.length > 0) {\n          await supabase.from('private_messages').update({ is_read: true }).in('id', unreadIds);\n        }\n      }\n\n      // Enriquecer com dados do sender\n      const senderIds = [...new Set((data || []).map(m => m.sender_id))];\n      let sendersMap: Record<string, any> = {};\n      if (senderIds.length > 0) {\n        const { data: senders } = await supabase\n          .from('users').select('id, name, display_name, profile_photo').in('id', senderIds);\n        (senders || []).forEach(s => { sendersMap[s.id] = s; });\n      }\n\n      setMessages((data || []).map(m => ({\n        ...m,\n        sender_data: sendersMap[m.sender_id] || { id: m.sender_id, name: 'Membro', display_name: null, profile_photo: null }\n      })));\n    } catch (err) {\n      console.error('[usePrivateMessages] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, [otherUserId]);\n\n  // Carregar lista de conversas\n  const loadConversations = useCallback(async () => {\n    try {\n      setIsLoading(true);\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return;\n\n      const { data, error } = await supabase\n        .from('private_messages')\n        .select('*')\n        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)\n        .order('created_at', { ascending: false });\n\n      if (error) throw error;\n\n      // Agrupar por conversa\n      const convMap: Record<string, { messages: any[]; unread: number }> = {};\n      (data || []).forEach(m => {\n        const otherId = m.sender_id === user.id ? m.receiver_id : m.sender_id;\n        if (!convMap[otherId]) convMap[otherId] = { messages: [], unread: 0 };\n        convMap[otherId].messages.push(m);\n        if (m.receiver_id === user.id && !m.is_read) convMap[otherId].unread++;\n      });\n\n      // Buscar dados dos outros usuarios\n      const otherIds = Object.keys(convMap);\n      let usersMap: Record<string, any> = {};\n      if (otherIds.length > 0) {\n        const { data: users } = await supabase\n          .from('users').select('id, name, display_name, profile_photo').in('id', otherIds);\n        (users || []).forEach(u => { usersMap[u.id] = u; });\n      }\n\n      const convList: Conversation[] = otherIds.map(otherId => {\n        const conv = convMap[otherId];\n        const lastMsg = conv.messages[0];\n        const otherUser = usersMap[otherId] || { name: 'Membro', display_name: null, profile_photo: null };\n        return {\n          other_user_id: otherId,\n          other_user_name: otherUser.display_name || otherUser.name,\n          other_user_photo: otherUser.profile_photo,\n          last_message: lastMsg.content,\n          last_message_at: lastMsg.created_at,\n          unread_count: conv.unread,\n        };\n      }).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());\n\n      setConversations(convList);\n    } catch (err) {\n      console.error('[usePrivateMessages] Erro conversas:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  // Realtime para mensagens novas\n  useEffect(() => {\n    if (otherUserId) {\n      loadMessages();\n    } else {\n      loadConversations();\n    }\n\n    const setupRealtime = async () => {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return;\n\n      const channel = supabase\n        .channel('dm-realtime')\n        .on('postgres_changes', {\n          event: 'INSERT',\n          schema: 'public',\n          table: 'private_messages',\n          filter: `receiver_id=eq.${user.id}`,\n        }, (payload) => {\n          const newMsg = payload.new as PrivateMessage;\n          if (otherUserId && newMsg.sender_id === otherUserId) {\n            setMessages(prev => [...prev, newMsg]);\n            // Marcar como lida\n            supabase.from('private_messages').update({ is_read: true }).eq('id', newMsg.id);\n          } else {\n            loadConversations();\n          }\n        })\n        .subscribe();\n\n      channelRef.current = channel;\n      return () => { supabase.removeChannel(channel); };\n    };\n\n    const cleanup = setupRealtime();\n    return () => { cleanup.then(fn => fn?.()); };\n  }, [otherUserId, loadMessages, loadConversations]);\n\n  const sendMessage = useCallback(async (receiverId: string, content: string) => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const { error } = await supabase.from('private_messages').insert({\n        sender_id: user.id,\n        receiver_id: receiverId,\n        content: content.trim(),\n      });\n\n      if (error) throw error;\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message };\n    }\n  }, []);\n\n  return { messages, conversations, isLoading, sendMessage, refresh: otherUserId ? loadMessages : loadConversations };\n}"
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from './supabase';
+
+export interface PrivateMessage {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  sender_data?: { id: string; name: string; display_name?: string; profile_photo: string | null };
+}
+
+export interface Conversation {
+  other_user_id: string;
+  other_user_name: string;
+  other_user_photo: string | null;
+  last_message: string;
+  last_message_at: string;
+  unread_count: number;
+}
+
+export function usePrivateMessages(otherUserId?: string) {
+  const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Carregar mensagens de uma conversa especifica
+  const loadMessages = useCallback(async () => {
+    if (!otherUserId) return;
+    try {
+      setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('private_messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
+        .order('created_at', { ascending: true })
+        .limit(200);
+
+      if (error) throw error;
+
+      // Marcar como lidas
+      if (data && data.length > 0) {
+        const unreadIds = data.filter(m => m.receiver_id === user.id && !m.is_read).map(m => m.id);
+        if (unreadIds.length > 0) {
+          await supabase.from('private_messages').update({ is_read: true }).in('id', unreadIds);
+        }
+      }
+
+      // Enriquecer com dados do sender
+      const senderIds = [...new Set((data || []).map(m => m.sender_id))];
+      let sendersMap: Record<string, any> = {};
+      if (senderIds.length > 0) {
+        const { data: senders } = await supabase
+          .from('users').select('id, name, display_name, profile_photo').in('id', senderIds);
+        (senders || []).forEach(s => { sendersMap[s.id] = s; });
+      }
+
+      setMessages((data || []).map(m => ({
+        ...m,
+        sender_data: sendersMap[m.sender_id] || { id: m.sender_id, name: 'Membro', display_name: null, profile_photo: null }
+      })));
+    } catch (err) {
+      console.error('[usePrivateMessages] Erro:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [otherUserId]);
+
+  // Carregar lista de conversas
+  const loadConversations = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('private_messages')
+        .select('*')
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Agrupar por conversa
+      const convMap: Record<string, { messages: any[]; unread: number }> = {};
+      (data || []).forEach(m => {
+        const otherId = m.sender_id === user.id ? m.receiver_id : m.sender_id;
+        if (!convMap[otherId]) convMap[otherId] = { messages: [], unread: 0 };
+        convMap[otherId].messages.push(m);
+        if (m.receiver_id === user.id && !m.is_read) convMap[otherId].unread++;
+      });
+
+      // Buscar dados dos outros usuarios
+      const otherIds = Object.keys(convMap);
+      let usersMap: Record<string, any> = {};
+      if (otherIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users').select('id, name, display_name, profile_photo').in('id', otherIds);
+        (users || []).forEach(u => { usersMap[u.id] = u; });
+      }
+
+      const convList: Conversation[] = otherIds.map(otherId => {
+        const conv = convMap[otherId];
+        const lastMsg = conv.messages[0];
+        const otherUser = usersMap[otherId] || { name: 'Membro', display_name: null, profile_photo: null };
+        return {
+          other_user_id: otherId,
+          other_user_name: otherUser.display_name || otherUser.name,
+          other_user_photo: otherUser.profile_photo,
+          last_message: lastMsg.content,
+          last_message_at: lastMsg.created_at,
+          unread_count: conv.unread,
+        };
+      }).sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+
+      setConversations(convList);
+    } catch (err) {
+      console.error('[usePrivateMessages] Erro conversas:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Realtime para mensagens novas
+  useEffect(() => {
+    if (otherUserId) {
+      loadMessages();
+    } else {
+      loadConversations();
+    }
+
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const channel = supabase
+        .channel('dm-realtime')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'private_messages',
+          filter: `receiver_id=eq.${user.id}`,
+        }, (payload) => {
+          const newMsg = payload.new as PrivateMessage;
+          if (otherUserId && newMsg.sender_id === otherUserId) {
+            setMessages(prev => [...prev, newMsg]);
+            // Marcar como lida
+            supabase.from('private_messages').update({ is_read: true }).eq('id', newMsg.id);
+          } else {
+            loadConversations();
+          }
+        })
+        .subscribe();
+
+      channelRef.current = channel;
+      return () => { supabase.removeChannel(channel); };
+    };
+
+    const cleanup = setupRealtime();
+    return () => { cleanup.then(fn => fn?.()); };
+  }, [otherUserId, loadMessages, loadConversations]);
+
+  const sendMessage = useCallback(async (receiverId: string, content: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      const { error } = await supabase.from('private_messages').insert({
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content: content.trim(),
+      });
+
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, []);
+
+  return { messages, conversations, isLoading, sendMessage, refresh: otherUserId ? loadMessages : loadConversations };
 }

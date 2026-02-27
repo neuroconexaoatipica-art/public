@@ -1,7 +1,203 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/EventsPage.tsx",
-  "created_at": "2026-02-27T05:36:20.391Z",
-  "file_content": "import { useState } from \"react\";\nimport { motion } from \"motion/react\";\nimport { ArrowLeft, Calendar, PlusCircle, Flame, Filter, ChevronDown } from \"lucide-react\";\nimport { useEvents, EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS } from \"../../lib/useEvents\";\nimport type { EventWithMeta, CreateEventInput } from \"../../lib/useEvents\";\nimport type { EventType } from \"../../lib/supabase\";\nimport { EventCard } from \"./EventCard\";\nimport { CreateEventModal } from \"./CreateEventModal\";\nimport { useProfileContext, hasModAccess } from \"../../lib\";\nimport { LogoIcon } from \"./LogoIcon\";\n\ninterface EventsPageProps {\n  onBack: () => void;\n  onSelectEvent: (event: EventWithMeta) => void;\n}\n\ntype TabFilter = 'upcoming' | 'past' | 'my-events' | 'rituals';\n\nexport function EventsPage({ onBack, onSelectEvent }: EventsPageProps) {\n  const { user } = useProfileContext();\n  const canCreate = hasModAccess(user?.role);\n\n  const [activeTab, setActiveTab] = useState<TabFilter>('upcoming');\n  const [typeFilter, setTypeFilter] = useState<EventType | ''>('');\n  const [showFilters, setShowFilters] = useState(false);\n  const [isCreateOpen, setIsCreateOpen] = useState(false);\n\n  // Carregar todos os eventos e filtrar no frontend (mais simples para o volume atual)\n  const { events, isLoading, createEvent, joinEvent, leaveEvent } = useEvents({\n    upcoming: activeTab === 'upcoming',\n    eventType: typeFilter || undefined,\n    status: activeTab === 'past' ? 'completed' : undefined,\n  });\n\n  // Filtros por tab\n  const filteredEvents = events.filter(e => {\n    if (activeTab === 'my-events') return e.is_participating || e.host_id === user?.id;\n    if (activeTab === 'rituals') return e.event_type === 'ritual';\n    return true;\n  });\n\n  const handleCreate = async (input: CreateEventInput) => {\n    await createEvent(input);\n  };\n\n  const tabs: { key: TabFilter; label: string; icon?: typeof Calendar }[] = [\n    { key: 'upcoming', label: 'Proximos' },\n    { key: 'rituals', label: 'Rituais' },\n    { key: 'my-events', label: 'Meus' },\n    { key: 'past', label: 'Encerrados' },\n  ];\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Header */}\n      <div className=\"w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40\">\n        <div className=\"mx-auto max-w-[1000px] px-6 py-4\">\n          <div className=\"flex items-center justify-between\">\n            <button\n              onClick={onBack}\n              className=\"flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors\"\n            >\n              <ArrowLeft className=\"h-5 w-5\" />\n              <span>Voltar</span>\n            </button>\n\n            <div className=\"flex items-center gap-3\">\n              <LogoIcon size={32} className=\"h-8 w-8\" />\n              <h1 className=\"text-lg text-white\">Eventos & Rituais</h1>\n            </div>\n\n            {canCreate && (\n              <button\n                onClick={() => setIsCreateOpen(true)}\n                className=\"flex items-center gap-2 px-4 py-2 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors text-sm\"\n              >\n                <PlusCircle className=\"h-4 w-4\" />\n                <span className=\"hidden sm:inline\">Criar Evento</span>\n              </button>\n            )}\n\n            {!canCreate && <div />}\n          </div>\n        </div>\n      </div>\n\n      <div className=\"mx-auto max-w-[1000px] px-6 py-6\">\n        {/* Tabs */}\n        <div className=\"flex items-center gap-2 mb-6 overflow-x-auto pb-2\">\n          {tabs.map((tab) => (\n            <button\n              key={tab.key}\n              onClick={() => setActiveTab(tab.key)}\n              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-all ${\n                activeTab === tab.key\n                  ? 'bg-[#81D8D0] text-black'\n                  : 'bg-white/5 text-white/50 hover:bg-white/10'\n              }`}\n            >\n              {tab.key === 'rituals' && <Flame className=\"inline h-3.5 w-3.5 mr-1.5\" />}\n              {tab.label}\n            </button>\n          ))}\n\n          {/* Filtro por tipo */}\n          <button\n            onClick={() => setShowFilters(!showFilters)}\n            className={`ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all ${\n              showFilters || typeFilter ? 'bg-[#FF6B35]/20 text-[#FF6B35]' : 'bg-white/5 text-white/40 hover:bg-white/10'\n            }`}\n          >\n            <Filter className=\"h-3.5 w-3.5\" />\n            Filtro\n            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />\n          </button>\n        </div>\n\n        {/* Painel de filtros */}\n        {showFilters && (\n          <motion.div\n            initial={{ opacity: 0, height: 0 }}\n            animate={{ opacity: 1, height: 'auto' }}\n            className=\"mb-6 p-4 bg-white/3 border border-white/10 rounded-xl\"\n          >\n            <p className=\"text-xs text-white/40 mb-2\">Tipo de evento:</p>\n            <div className=\"flex flex-wrap gap-2\">\n              <button\n                onClick={() => setTypeFilter('')}\n                className={`px-3 py-1.5 rounded-lg text-xs transition-all ${\n                  !typeFilter ? 'bg-[#81D8D0]/20 text-[#81D8D0]' : 'bg-white/5 text-white/40'\n                }`}\n              >\n                Todos\n              </button>\n              {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((type) => (\n                <button\n                  key={type}\n                  onClick={() => setTypeFilter(typeFilter === type ? '' : type)}\n                  className={`px-3 py-1.5 rounded-lg text-xs transition-all ${\n                    typeFilter === type ? 'bg-[#81D8D0]/20 text-[#81D8D0]' : 'bg-white/5 text-white/40'\n                  }`}\n                >\n                  {EVENT_TYPE_LABELS[type]}\n                </button>\n              ))}\n            </div>\n          </motion.div>\n        )}\n\n        {/* Lista de eventos */}\n        {isLoading ? (\n          <div className=\"text-center py-16\">\n            <div className=\"w-12 h-12 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4\" />\n            <p className=\"text-white/40\">Carregando eventos...</p>\n          </div>\n        ) : filteredEvents.length === 0 ? (\n          <div className=\"text-center py-16\">\n            <Calendar className=\"h-16 w-16 text-white/10 mx-auto mb-4\" />\n            <p className=\"text-xl text-white/40 mb-2\">\n              {activeTab === 'rituals' ? 'Nenhum ritual agendado' :\n               activeTab === 'my-events' ? 'Voce ainda nao participa de nenhum evento' :\n               activeTab === 'past' ? 'Nenhum evento encerrado' :\n               'Nenhum evento proximo'}\n            </p>\n            <p className=\"text-sm text-white/25 mb-6\">\n              {canCreate\n                ? 'Crie o primeiro evento da comunidade.'\n                : 'Eventos serao publicados em breve.'}\n            </p>\n            {canCreate && (\n              <button\n                onClick={() => setIsCreateOpen(true)}\n                className=\"inline-flex items-center gap-2 px-6 py-3 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors\"\n              >\n                <PlusCircle className=\"h-5 w-5\" />\n                Criar primeiro evento\n              </button>\n            )}\n          </div>\n        ) : (\n          <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n            {filteredEvents.map((event) => (\n              <EventCard\n                key={event.id}\n                event={event}\n                onClick={onSelectEvent}\n                onJoin={(id) => joinEvent(id)}\n                onLeave={(id) => leaveEvent(id)}\n              />\n            ))}\n          </div>\n        )}\n      </div>\n\n      {/* Modal criar evento */}\n      <CreateEventModal\n        isOpen={isCreateOpen}\n        onClose={() => setIsCreateOpen(false)}\n        onSubmit={handleCreate}\n      />\n    </div>\n  );\n}"
+import { useState } from "react";
+import { motion } from "motion/react";
+import { ArrowLeft, Calendar, PlusCircle, Flame, Filter, ChevronDown } from "lucide-react";
+import { useEvents, EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS } from "../../lib/useEvents";
+import type { EventWithMeta, CreateEventInput } from "../../lib/useEvents";
+import type { EventType } from "../../lib/supabase";
+import { EventCard } from "./EventCard";
+import { CreateEventModal } from "./CreateEventModal";
+import { useProfileContext, hasModAccess } from "../../lib";
+import { LogoIcon } from "./LogoIcon";
+
+interface EventsPageProps {
+  onBack: () => void;
+  onSelectEvent: (event: EventWithMeta) => void;
+}
+
+type TabFilter = 'upcoming' | 'past' | 'my-events' | 'rituals';
+
+export function EventsPage({ onBack, onSelectEvent }: EventsPageProps) {
+  const { user } = useProfileContext();
+  const canCreate = hasModAccess(user?.role);
+
+  const [activeTab, setActiveTab] = useState<TabFilter>('upcoming');
+  const [typeFilter, setTypeFilter] = useState<EventType | ''>('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // Carregar todos os eventos e filtrar no frontend (mais simples para o volume atual)
+  const { events, isLoading, createEvent, joinEvent, leaveEvent } = useEvents({
+    upcoming: activeTab === 'upcoming',
+    eventType: typeFilter || undefined,
+    status: activeTab === 'past' ? 'completed' : undefined,
+  });
+
+  // Filtros por tab
+  const filteredEvents = events.filter(e => {
+    if (activeTab === 'my-events') return e.is_participating || e.host_id === user?.id;
+    if (activeTab === 'rituals') return e.event_type === 'ritual';
+    return true;
+  });
+
+  const handleCreate = async (input: CreateEventInput) => {
+    await createEvent(input);
+  };
+
+  const tabs: { key: TabFilter; label: string; icon?: typeof Calendar }[] = [
+    { key: 'upcoming', label: 'Proximos' },
+    { key: 'rituals', label: 'Rituais' },
+    { key: 'my-events', label: 'Meus' },
+    { key: 'past', label: 'Encerrados' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <div className="w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40">
+        <div className="mx-auto max-w-[1000px] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span>Voltar</span>
+            </button>
+
+            <div className="flex items-center gap-3">
+              <LogoIcon size={32} className="h-8 w-8" />
+              <h1 className="text-lg text-white">Eventos & Rituais</h1>
+            </div>
+
+            {canCreate && (
+              <button
+                onClick={() => setIsCreateOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors text-sm"
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Criar Evento</span>
+              </button>
+            )}
+
+            {!canCreate && <div />}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-[1000px] px-6 py-6">
+        {/* Tabs */}
+        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-all ${
+                activeTab === tab.key
+                  ? 'bg-[#81D8D0] text-black'
+                  : 'bg-white/5 text-white/50 hover:bg-white/10'
+              }`}
+            >
+              {tab.key === 'rituals' && <Flame className="inline h-3.5 w-3.5 mr-1.5" />}
+              {tab.label}
+            </button>
+          ))}
+
+          {/* Filtro por tipo */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all ${
+              showFilters || typeFilter ? 'bg-[#FF6B35]/20 text-[#FF6B35]' : 'bg-white/5 text-white/40 hover:bg-white/10'
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filtro
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {/* Painel de filtros */}
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mb-6 p-4 bg-white/3 border border-white/10 rounded-xl"
+          >
+            <p className="text-xs text-white/40 mb-2">Tipo de evento:</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setTypeFilter('')}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
+                  !typeFilter ? 'bg-[#81D8D0]/20 text-[#81D8D0]' : 'bg-white/5 text-white/40'
+                }`}
+              >
+                Todos
+              </button>
+              {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(typeFilter === type ? '' : type)}
+                  className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
+                    typeFilter === type ? 'bg-[#81D8D0]/20 text-[#81D8D0]' : 'bg-white/5 text-white/40'
+                  }`}
+                >
+                  {EVENT_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Lista de eventos */}
+        {isLoading ? (
+          <div className="text-center py-16">
+            <div className="w-12 h-12 border-4 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-white/40">Carregando eventos...</p>
+          </div>
+        ) : filteredEvents.length === 0 ? (
+          <div className="text-center py-16">
+            <Calendar className="h-16 w-16 text-white/10 mx-auto mb-4" />
+            <p className="text-xl text-white/40 mb-2">
+              {activeTab === 'rituals' ? 'Nenhum ritual agendado' :
+               activeTab === 'my-events' ? 'Voce ainda nao participa de nenhum evento' :
+               activeTab === 'past' ? 'Nenhum evento encerrado' :
+               'Nenhum evento proximo'}
+            </p>
+            <p className="text-sm text-white/25 mb-6">
+              {canCreate
+                ? 'Crie o primeiro evento da comunidade.'
+                : 'Eventos serao publicados em breve.'}
+            </p>
+            {canCreate && (
+              <button
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors"
+              >
+                <PlusCircle className="h-5 w-5" />
+                Criar primeiro evento
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onClick={onSelectEvent}
+                onJoin={(id) => joinEvent(id)}
+                onLeave={(id) => leaveEvent(id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal criar evento */}
+      <CreateEventModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSubmit={handleCreate}
+      />
+    </div>
+  );
 }

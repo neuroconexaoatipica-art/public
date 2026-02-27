@@ -1,7 +1,272 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/InteractivePrompt.tsx",
-  "created_at": "2026-02-27T05:36:14.026Z",
-  "file_content": "import { useState, useEffect } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { Send, MessageCircle, Heart, ChevronDown, ChevronUp, Loader2 } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\ninterface InteractivePromptProps {\n  promptType: \"desafio\" | \"pergunta\";\n  title: string;\n  subtitle?: string;\n  text: string;\n  author?: string;\n  icon: React.ReactNode;\n  borderColor: string;\n  accentColor: string;\n}\n\ninterface PromptResponse {\n  id: string;\n  author_name: string;\n  content: string;\n  likes: number;\n  created_at: string;\n}\n\nexport function InteractivePrompt({\n  promptType,\n  title,\n  subtitle,\n  text,\n  author,\n  icon,\n  borderColor,\n  accentColor,\n}: InteractivePromptProps) {\n  const [responses, setResponses] = useState<PromptResponse[]>([]);\n  const [showResponses, setShowResponses] = useState(false);\n  const [newResponse, setNewResponse] = useState(\"\");\n  const [isSubmitting, setIsSubmitting] = useState(false);\n  const [submitted, setSubmitted] = useState(false);\n  const [isLoadingResponses, setIsLoadingResponses] = useState(false);\n  const [responseCount, setResponseCount] = useState(0);\n\n  // Carregar contagem de respostas\n  useEffect(() => {\n    async function loadCount() {\n      try {\n        // Busca posts publicos marcados com tag do prompt\n        const tag = promptType === \"desafio\" ? \"[DESAFIO]\" : \"[PERGUNTA]\";\n        const { data, error } = await supabase\n          .from(\"posts\")\n          .select(\"id\", { count: \"exact\" })\n          .eq(\"is_public\", true)\n          .ilike(\"content\", `${tag}%`)\n          .limit(0);\n\n        if (!error) {\n          setResponseCount((data as any)?.length || 0);\n        }\n      } catch {\n        // Silencioso\n      }\n    }\n    loadCount();\n  }, [promptType]);\n\n  // Carregar respostas quando abrir\n  const loadResponses = async () => {\n    setIsLoadingResponses(true);\n    try {\n      const tag = promptType === \"desafio\" ? \"[DESAFIO]\" : \"[PERGUNTA]\";\n      const { data: posts } = await supabase\n        .from(\"posts\")\n        .select(\"id, content, author, created_at\")\n        .eq(\"is_public\", true)\n        .ilike(\"content\", `${tag}%`)\n        .order(\"created_at\", { ascending: false })\n        .limit(10);\n\n      if (posts && posts.length > 0) {\n        const authorIds = [...new Set(posts.map(p => p.author))];\n        const { data: authors } = await supabase\n          .from(\"users\")\n          .select(\"id, name\")\n          .in(\"id\", authorIds);\n\n        const authorMap: Record<string, string> = {};\n        (authors || []).forEach((a: any) => { authorMap[a.id] = a.name; });\n\n        setResponses(posts.map(p => ({\n          id: p.id,\n          author_name: authorMap[p.author] || \"Membro\",\n          content: p.content.replace(/^\\[(DESAFIO|PERGUNTA)\\]\\s*/, \"\"),\n          likes: 0,\n          created_at: p.created_at,\n        })));\n        setResponseCount(posts.length);\n      }\n    } catch {\n      // Silencioso\n    }\n    setIsLoadingResponses(false);\n  };\n\n  const handleToggleResponses = () => {\n    if (!showResponses) {\n      loadResponses();\n    }\n    setShowResponses(!showResponses);\n  };\n\n  const handleSubmit = async () => {\n    if (!newResponse.trim()) return;\n    setIsSubmitting(true);\n\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n\n      if (user) {\n        // Usuario logado — criar post publico\n        const tag = promptType === \"desafio\" ? \"[DESAFIO]\" : \"[PERGUNTA]\";\n        await supabase.from(\"posts\").insert({\n          content: `${tag} ${newResponse.trim()}`,\n          author: user.id,\n          is_public: true,\n        });\n        setSubmitted(true);\n        setNewResponse(\"\");\n        // Recarregar respostas\n        if (showResponses) loadResponses();\n        setResponseCount(prev => prev + 1);\n      } else {\n        // Visitante — salvar como contact_request\n        await supabase.from(\"contact_requests\").insert({\n          reason: \"other\",\n          message: `[${promptType.toUpperCase()} RESPOSTA] ${newResponse.trim()}`,\n          status: \"pending\",\n        });\n        setSubmitted(true);\n        setNewResponse(\"\");\n      }\n    } catch (err) {\n      console.error(\"Erro ao enviar resposta:\", err);\n    }\n\n    setIsSubmitting(false);\n    setTimeout(() => setSubmitted(false), 3000);\n  };\n\n  function timeAgo(dateStr: string): string {\n    const diff = Date.now() - new Date(dateStr).getTime();\n    const mins = Math.floor(diff / 60000);\n    if (mins < 60) return `${mins}min`;\n    const hours = Math.floor(mins / 60);\n    if (hours < 24) return `${hours}h`;\n    const days = Math.floor(hours / 24);\n    return `${days}d`;\n  }\n\n  return (\n    <motion.div\n      initial={{ opacity: 0, y: 20 }}\n      whileInView={{ opacity: 1, y: 0 }}\n      viewport={{ once: true }}\n      className=\"bg-white rounded-2xl p-5 transition-all\"\n      style={{ border: `2px solid ${borderColor}` }}\n    >\n      {/* Header */}\n      <div className=\"flex items-center gap-2 mb-3\">\n        {icon}\n        <div>\n          <h3 className=\"text-[#1A1A1A] text-sm\" style={{ fontWeight: 700 }}>{title}</h3>\n          {subtitle && (\n            <span className=\"text-[10px] uppercase tracking-wider\" style={{ color: `${accentColor}99`, fontWeight: 600 }}>\n              {subtitle}\n            </span>\n          )}\n        </div>\n      </div>\n\n      {/* Texto do prompt */}\n      <p className=\"text-[#333] text-sm leading-relaxed mb-3\" style={{ fontFamily: \"Lora, serif\", fontStyle: \"italic\" }}>\n        \"{text}\"\n      </p>\n      {author && (\n        <span className=\"text-xs\" style={{ color: `${accentColor}99` }}>— {author}</span>\n      )}\n\n      {/* Area de resposta — aberta para todos */}\n      <div className=\"mt-4 pt-3 border-t border-[#1A1A1A]/8\">\n        {submitted ? (\n          <motion.p\n            initial={{ opacity: 0 }}\n            animate={{ opacity: 1 }}\n            className=\"text-sm text-center py-2\"\n            style={{ color: accentColor, fontWeight: 600 }}\n          >\n            Resposta registrada!\n          </motion.p>\n        ) : (\n          <div className=\"flex gap-2\">\n            <input\n              type=\"text\"\n              value={newResponse}\n              onChange={(e) => setNewResponse(e.target.value)}\n              onKeyDown={(e) => e.key === \"Enter\" && handleSubmit()}\n              placeholder=\"Sua resposta...\"\n              maxLength={500}\n              className=\"flex-1 px-3 py-2 bg-[#F5F5F5] border border-[#1A1A1A]/8 rounded-lg text-sm text-[#1A1A1A] placeholder:text-[#999] focus:border-[#1A1A1A]/20 focus:outline-none\"\n            />\n            <motion.button\n              onClick={handleSubmit}\n              disabled={!newResponse.trim() || isSubmitting}\n              whileHover={{ scale: 1.05 }}\n              whileTap={{ scale: 0.95 }}\n              className=\"p-2 rounded-lg text-white disabled:opacity-40 transition-opacity\"\n              style={{ background: accentColor }}\n            >\n              {isSubmitting ? <Loader2 className=\"h-4 w-4 animate-spin\" /> : <Send className=\"h-4 w-4\" />}\n            </motion.button>\n          </div>\n        )}\n      </div>\n\n      {/* Ver respostas */}\n      <button\n        onClick={handleToggleResponses}\n        className=\"w-full flex items-center justify-center gap-1.5 mt-3 py-1.5 text-xs transition-colors hover:text-[#1A1A1A]\"\n        style={{ color: \"#999\", fontWeight: 600 }}\n      >\n        <MessageCircle className=\"h-3 w-3\" />\n        {responseCount > 0 ? `${responseCount} respostas` : \"Ver respostas\"}\n        {showResponses ? <ChevronUp className=\"h-3 w-3\" /> : <ChevronDown className=\"h-3 w-3\" />}\n      </button>\n\n      {/* Lista de respostas */}\n      <AnimatePresence>\n        {showResponses && (\n          <motion.div\n            initial={{ height: 0, opacity: 0 }}\n            animate={{ height: \"auto\", opacity: 1 }}\n            exit={{ height: 0, opacity: 0 }}\n            className=\"overflow-hidden\"\n          >\n            <div className=\"mt-2 pt-2 border-t border-[#1A1A1A]/5 space-y-2\">\n              {isLoadingResponses ? (\n                <div className=\"py-4 text-center\">\n                  <Loader2 className=\"h-4 w-4 animate-spin mx-auto\" style={{ color: accentColor }} />\n                </div>\n              ) : responses.length === 0 ? (\n                <p className=\"text-xs text-[#999] text-center py-3\">\n                  Nenhuma resposta ainda. Seja a primeira pessoa!\n                </p>\n              ) : (\n                responses.map((r) => (\n                  <div key={r.id} className=\"flex gap-2 p-2 rounded-lg bg-[#F9F9F9]\">\n                    <div className=\"flex-1\">\n                      <div className=\"flex items-center gap-2\">\n                        <span className=\"text-[10px] text-[#1A1A1A]\" style={{ fontWeight: 700 }}>{r.author_name}</span>\n                        <span className=\"text-[9px] text-[#CCC]\">{timeAgo(r.created_at)}</span>\n                      </div>\n                      <p className=\"text-xs text-[#555] mt-0.5 leading-relaxed\">{r.content}</p>\n                    </div>\n                  </div>\n                ))\n              )}\n            </div>\n          </motion.div>\n        )}\n      </AnimatePresence>\n    </motion.div>\n  );\n}\n"
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Send, MessageCircle, Heart, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+interface InteractivePromptProps {
+  promptType: "desafio" | "pergunta";
+  title: string;
+  subtitle?: string;
+  text: string;
+  author?: string;
+  icon: React.ReactNode;
+  borderColor: string;
+  accentColor: string;
+}
+
+interface PromptResponse {
+  id: string;
+  author_name: string;
+  content: string;
+  likes: number;
+  created_at: string;
+}
+
+export function InteractivePrompt({
+  promptType,
+  title,
+  subtitle,
+  text,
+  author,
+  icon,
+  borderColor,
+  accentColor,
+}: InteractivePromptProps) {
+  const [responses, setResponses] = useState<PromptResponse[]>([]);
+  const [showResponses, setShowResponses] = useState(false);
+  const [newResponse, setNewResponse] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [isLoadingResponses, setIsLoadingResponses] = useState(false);
+  const [responseCount, setResponseCount] = useState(0);
+
+  // Carregar contagem de respostas
+  useEffect(() => {
+    async function loadCount() {
+      try {
+        // Busca posts publicos marcados com tag do prompt
+        const tag = promptType === "desafio" ? "[DESAFIO]" : "[PERGUNTA]";
+        const { data, error } = await supabase
+          .from("posts")
+          .select("id", { count: "exact" })
+          .eq("is_public", true)
+          .ilike("content", `${tag}%`)
+          .limit(0);
+
+        if (!error) {
+          setResponseCount((data as any)?.length || 0);
+        }
+      } catch {
+        // Silencioso
+      }
+    }
+    loadCount();
+  }, [promptType]);
+
+  // Carregar respostas quando abrir
+  const loadResponses = async () => {
+    setIsLoadingResponses(true);
+    try {
+      const tag = promptType === "desafio" ? "[DESAFIO]" : "[PERGUNTA]";
+      const { data: posts } = await supabase
+        .from("posts")
+        .select("id, content, author, created_at")
+        .eq("is_public", true)
+        .ilike("content", `${tag}%`)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (posts && posts.length > 0) {
+        const authorIds = [...new Set(posts.map(p => p.author))];
+        const { data: authors } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", authorIds);
+
+        const authorMap: Record<string, string> = {};
+        (authors || []).forEach((a: any) => { authorMap[a.id] = a.name; });
+
+        setResponses(posts.map(p => ({
+          id: p.id,
+          author_name: authorMap[p.author] || "Membro",
+          content: p.content.replace(/^\[(DESAFIO|PERGUNTA)\]\s*/, ""),
+          likes: 0,
+          created_at: p.created_at,
+        })));
+        setResponseCount(posts.length);
+      }
+    } catch {
+      // Silencioso
+    }
+    setIsLoadingResponses(false);
+  };
+
+  const handleToggleResponses = () => {
+    if (!showResponses) {
+      loadResponses();
+    }
+    setShowResponses(!showResponses);
+  };
+
+  const handleSubmit = async () => {
+    if (!newResponse.trim()) return;
+    setIsSubmitting(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        // Usuario logado — criar post publico
+        const tag = promptType === "desafio" ? "[DESAFIO]" : "[PERGUNTA]";
+        await supabase.from("posts").insert({
+          content: `${tag} ${newResponse.trim()}`,
+          author: user.id,
+          is_public: true,
+        });
+        setSubmitted(true);
+        setNewResponse("");
+        // Recarregar respostas
+        if (showResponses) loadResponses();
+        setResponseCount(prev => prev + 1);
+      } else {
+        // Visitante — salvar como contact_request
+        await supabase.from("contact_requests").insert({
+          reason: "other",
+          message: `[${promptType.toUpperCase()} RESPOSTA] ${newResponse.trim()}`,
+          status: "pending",
+        });
+        setSubmitted(true);
+        setNewResponse("");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar resposta:", err);
+    }
+
+    setIsSubmitting(false);
+    setTimeout(() => setSubmitted(false), 3000);
+  };
+
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `${days}d`;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      className="bg-white rounded-2xl p-5 transition-all"
+      style={{ border: `2px solid ${borderColor}` }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        {icon}
+        <div>
+          <h3 className="text-[#1A1A1A] text-sm" style={{ fontWeight: 700 }}>{title}</h3>
+          {subtitle && (
+            <span className="text-[10px] uppercase tracking-wider" style={{ color: `${accentColor}99`, fontWeight: 600 }}>
+              {subtitle}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Texto do prompt */}
+      <p className="text-[#333] text-sm leading-relaxed mb-3" style={{ fontFamily: "Lora, serif", fontStyle: "italic" }}>
+        "{text}"
+      </p>
+      {author && (
+        <span className="text-xs" style={{ color: `${accentColor}99` }}>— {author}</span>
+      )}
+
+      {/* Area de resposta — aberta para todos */}
+      <div className="mt-4 pt-3 border-t border-[#1A1A1A]/8">
+        {submitted ? (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-sm text-center py-2"
+            style={{ color: accentColor, fontWeight: 600 }}
+          >
+            Resposta registrada!
+          </motion.p>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newResponse}
+              onChange={(e) => setNewResponse(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder="Sua resposta..."
+              maxLength={500}
+              className="flex-1 px-3 py-2 bg-[#F5F5F5] border border-[#1A1A1A]/8 rounded-lg text-sm text-[#1A1A1A] placeholder:text-[#999] focus:border-[#1A1A1A]/20 focus:outline-none"
+            />
+            <motion.button
+              onClick={handleSubmit}
+              disabled={!newResponse.trim() || isSubmitting}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 rounded-lg text-white disabled:opacity-40 transition-opacity"
+              style={{ background: accentColor }}
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </motion.button>
+          </div>
+        )}
+      </div>
+
+      {/* Ver respostas */}
+      <button
+        onClick={handleToggleResponses}
+        className="w-full flex items-center justify-center gap-1.5 mt-3 py-1.5 text-xs transition-colors hover:text-[#1A1A1A]"
+        style={{ color: "#999", fontWeight: 600 }}
+      >
+        <MessageCircle className="h-3 w-3" />
+        {responseCount > 0 ? `${responseCount} respostas` : "Ver respostas"}
+        {showResponses ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </button>
+
+      {/* Lista de respostas */}
+      <AnimatePresence>
+        {showResponses && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 pt-2 border-t border-[#1A1A1A]/5 space-y-2">
+              {isLoadingResponses ? (
+                <div className="py-4 text-center">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto" style={{ color: accentColor }} />
+                </div>
+              ) : responses.length === 0 ? (
+                <p className="text-xs text-[#999] text-center py-3">
+                  Nenhuma resposta ainda. Seja a primeira pessoa!
+                </p>
+              ) : (
+                responses.map((r) => (
+                  <div key={r.id} className="flex gap-2 p-2 rounded-lg bg-[#F9F9F9]">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-[#1A1A1A]" style={{ fontWeight: 700 }}>{r.author_name}</span>
+                        <span className="text-[9px] text-[#CCC]">{timeAgo(r.created_at)}</span>
+                      </div>
+                      <p className="text-xs text-[#555] mt-0.5 leading-relaxed">{r.content}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
 }

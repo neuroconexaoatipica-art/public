@@ -1,7 +1,144 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/ClaritySection.tsx",
-  "created_at": "2026-02-27T05:36:12.743Z",
-  "file_content": "import { motion } from \"motion/react\";\nimport {\n  UserCheck,\n  CheckCircle,\n  Shield,\n  MessageCircle,\n  Flame,\n  MapPin,\n} from \"lucide-react\";\n\ninterface ClaritySectionProps {\n  onCtaClick: () => void;\n}\n\nexport function ClaritySection({ onCtaClick }: ClaritySectionProps) {\n  const steps = [\n    {\n      icon: UserCheck,\n      title: \"Confirmação 18+ e aceite do código cultural\",\n      description:\n        \"Responsabilidade pessoal é pré-requisito. Sem confirmação, não entra.\",\n    },\n    {\n      icon: CheckCircle,\n      title: \"Perfil criado e comunidades liberadas\",\n      description:\n        \"Acesse todas as 14 comunidades desde o primeiro momento. Escolha onde pulsar.\",\n    },\n    {\n      icon: Flame,\n      title: \"Ritual de entrada respondido\",\n      description:\n        \"Sem ritual, não vira membro ativo. O ritual ancora a presença.\",\n    },\n    {\n      icon: MapPin,\n      title: \"Escolha seu estado e núcleo territorial\",\n      description:\n        \"Conecte-se com quem está perto. Lives territoriais, encontros reais.\",\n    },\n    {\n      icon: Shield,\n      title: \"Candidatura a Founder — curadoria ética\",\n      description:\n        \"Founders constroem a base. A seleção é humana e cuidadosa.\",\n    },\n    {\n      icon: MessageCircle,\n      title: \"Contato humano estruturado\",\n      description: \"Nada automatizado. Cada interação é real.\",\n    },\n  ];\n\n  return (\n    <section className=\"w-full py-16 md:py-24 lg:py-28\" style={{ background: \"#D4D4D4\" }}>\n      <div className=\"mx-auto max-w-[900px] px-6 lg:px-8\">\n        {/* Header */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6 }}\n          className=\"text-center mb-14\"\n        >\n          <h2\n            className=\"text-3xl md:text-4xl lg:text-5xl mb-6 text-[#1A1A1A]\"\n            style={{ fontWeight: 600 }}\n          >\n            O que acontece depois do cadastro\n          </h2>\n          <p className=\"text-lg md:text-xl text-[#666] max-w-2xl mx-auto leading-relaxed\">\n            Transparência total. Sem surpresas. Entrada ritualizada.\n          </p>\n        </motion.div>\n\n        {/* Steps */}\n        <div className=\"space-y-4 mb-14\">\n          {steps.map((step, i) => {\n            const IconComponent = step.icon;\n            return (\n              <motion.div\n                key={i}\n                initial={{ opacity: 0, x: -20 }}\n                whileInView={{ opacity: 1, x: 0 }}\n                viewport={{ once: true }}\n                transition={{ duration: 0.5, delay: 0.08 * i }}\n                className=\"flex items-start gap-5 bg-white border border-black/5 rounded-xl p-5 hover:border-[#81D8D0]/30 transition-colors group shadow-sm\"\n              >\n                <div className=\"flex items-center gap-3 flex-shrink-0\">\n                  <span className=\"text-xs text-[#CCC] w-5 text-right\" style={{ fontWeight: 600 }}>\n                    {i + 1}\n                  </span>\n                  <div className=\"w-10 h-10 rounded-xl bg-[#81D8D0]/15 flex items-center justify-center\">\n                    <IconComponent className=\"h-5 w-5 text-[#81D8D0]\" />\n                  </div>\n                </div>\n                <div>\n                  <h3\n                    className=\"text-[#1A1A1A] mb-1 group-hover:text-[#0A8F85] transition-colors\"\n                    style={{ fontWeight: 600 }}\n                  >\n                    {step.title}\n                  </h3>\n                  <p className=\"text-[#777] text-sm\">{step.description}</p>\n                </div>\n              </motion.div>\n            );\n          })}\n        </div>\n\n        {/* Reforço final */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6, delay: 0.4 }}\n          className=\"text-center\"\n        >\n          <p className=\"text-lg text-[#999] italic mb-8\">\n            Sem automatização invasiva.\n            <br />\n            Sem spam.\n            <br />\n            Sem pressão.\n          </p>\n\n          <motion.button\n            onClick={onCtaClick}\n            whileHover={{ scale: 1.03, y: -2 }}\n            whileTap={{ scale: 0.98 }}\n            className=\"inline-block px-10 py-4 bg-[#81D8D0] text-black rounded-xl text-lg shadow-lg hover:shadow-xl transition-all\"\n            style={{ fontWeight: 700 }}\n          >\n            Entrar na Comunidade\n          </motion.button>\n\n          <p className=\"text-xs text-[#CCC] mt-6\">\n            NeuroConexão Atípica — Onde intensidade não é defeito.\n          </p>\n        </motion.div>\n      </div>\n    </section>\n  );\n}"
+import { motion } from "motion/react";
+import {
+  UserCheck,
+  CheckCircle,
+  Shield,
+  MessageCircle,
+  Flame,
+  MapPin,
+} from "lucide-react";
+
+interface ClaritySectionProps {
+  onCtaClick: () => void;
+}
+
+export function ClaritySection({ onCtaClick }: ClaritySectionProps) {
+  const steps = [
+    {
+      icon: UserCheck,
+      title: "Confirmação 18+ e aceite do código cultural",
+      description:
+        "Responsabilidade pessoal é pré-requisito. Sem confirmação, não entra.",
+    },
+    {
+      icon: CheckCircle,
+      title: "Perfil criado e comunidades liberadas",
+      description:
+        "Acesse todas as 14 comunidades desde o primeiro momento. Escolha onde pulsar.",
+    },
+    {
+      icon: Flame,
+      title: "Ritual de entrada respondido",
+      description:
+        "Sem ritual, não vira membro ativo. O ritual ancora a presença.",
+    },
+    {
+      icon: MapPin,
+      title: "Escolha seu estado e núcleo territorial",
+      description:
+        "Conecte-se com quem está perto. Lives territoriais, encontros reais.",
+    },
+    {
+      icon: Shield,
+      title: "Candidatura a Founder — curadoria ética",
+      description:
+        "Founders constroem a base. A seleção é humana e cuidadosa.",
+    },
+    {
+      icon: MessageCircle,
+      title: "Contato humano estruturado",
+      description: "Nada automatizado. Cada interação é real.",
+    },
+  ];
+
+  return (
+    <section className="w-full py-16 md:py-24 lg:py-28" style={{ background: "#D4D4D4" }}>
+      <div className="mx-auto max-w-[900px] px-6 lg:px-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-14"
+        >
+          <h2
+            className="text-3xl md:text-4xl lg:text-5xl mb-6 text-[#1A1A1A]"
+            style={{ fontWeight: 600 }}
+          >
+            O que acontece depois do cadastro
+          </h2>
+          <p className="text-lg md:text-xl text-[#666] max-w-2xl mx-auto leading-relaxed">
+            Transparência total. Sem surpresas. Entrada ritualizada.
+          </p>
+        </motion.div>
+
+        {/* Steps */}
+        <div className="space-y-4 mb-14">
+          {steps.map((step, i) => {
+            const IconComponent = step.icon;
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: 0.08 * i }}
+                className="flex items-start gap-5 bg-white border border-black/5 rounded-xl p-5 hover:border-[#81D8D0]/30 transition-colors group shadow-sm"
+              >
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span className="text-xs text-[#CCC] w-5 text-right" style={{ fontWeight: 600 }}>
+                    {i + 1}
+                  </span>
+                  <div className="w-10 h-10 rounded-xl bg-[#81D8D0]/15 flex items-center justify-center">
+                    <IconComponent className="h-5 w-5 text-[#81D8D0]" />
+                  </div>
+                </div>
+                <div>
+                  <h3
+                    className="text-[#1A1A1A] mb-1 group-hover:text-[#0A8F85] transition-colors"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {step.title}
+                  </h3>
+                  <p className="text-[#777] text-sm">{step.description}</p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Reforço final */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="text-center"
+        >
+          <p className="text-lg text-[#999] italic mb-8">
+            Sem automatização invasiva.
+            <br />
+            Sem spam.
+            <br />
+            Sem pressão.
+          </p>
+
+          <motion.button
+            onClick={onCtaClick}
+            whileHover={{ scale: 1.03, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            className="inline-block px-10 py-4 bg-[#81D8D0] text-black rounded-xl text-lg shadow-lg hover:shadow-xl transition-all"
+            style={{ fontWeight: 700 }}
+          >
+            Entrar na Comunidade
+          </motion.button>
+
+          <p className="text-xs text-[#CCC] mt-6">
+            NeuroConexão Atípica — Onde intensidade não é defeito.
+          </p>
+        </motion.div>
+      </div>
+    </section>
+  );
 }

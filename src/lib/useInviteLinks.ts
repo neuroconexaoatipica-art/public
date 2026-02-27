@@ -1,7 +1,119 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useInviteLinks.ts",
-  "created_at": "2026-02-27T05:36:05.761Z",
-  "file_content": "/**\n * useInviteLinks — Hook para convites por link rastreado\n * v1.1: Crescimento viral controlado\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase, TIMEOUTS } from './supabase';\n\nexport interface InviteLink {\n  id: string;\n  inviter_id: string;\n  code: string;\n  max_uses: number;\n  uses_count: number;\n  expires_at: string | null;\n  is_active: boolean;\n  created_at: string;\n}\n\nexport function useInviteLinks() {\n  const [links, setLinks] = useState<InviteLink[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n\n  const loadLinks = useCallback(async () => {\n    setIsLoading(true);\n    try {\n      const { data, error } = await supabase\n        .from('invite_links')\n        .select('*')\n        .order('created_at', { ascending: false })\n        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n      if (error) throw error;\n      setLinks((data || []) as InviteLink[]);\n    } catch (err) {\n      console.error('[useInviteLinks] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    loadLinks();\n  }, [loadLinks]);\n\n  /** Gerar novo link de convite */\n  const createInviteLink = useCallback(async (\n    maxUses: number = 5,\n    expiresInDays?: number\n  ): Promise<{ success: boolean; code?: string; error?: string }> => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      // Gerar codigo unico\n      const code = generateInviteCode();\n\n      const expiresAt = expiresInDays\n        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()\n        : null;\n\n      const { error: insertError } = await supabase\n        .from('invite_links')\n        .insert({\n          inviter_id: user.id,\n          code,\n          max_uses: Math.min(maxUses, 20), // max 20 usos por link\n          expires_at: expiresAt,\n        });\n\n      if (insertError) throw insertError;\n\n      await loadLinks();\n      return { success: true, code };\n    } catch (err: any) {\n      console.error('[useInviteLinks] Erro ao criar:', err);\n      return { success: false, error: err.message || 'Erro ao criar convite' };\n    }\n  }, [loadLinks]);\n\n  /** Desativar link */\n  const deactivateLink = useCallback(async (linkId: string) => {\n    try {\n      await supabase\n        .from('invite_links')\n        .update({ is_active: false })\n        .eq('id', linkId);\n      await loadLinks();\n    } catch (err) {\n      console.error('[useInviteLinks] Erro ao desativar:', err);\n    }\n  }, [loadLinks]);\n\n  /** Gerar URL completa do convite */\n  const getInviteURL = (code: string): string => {\n    const baseUrl = window.location.origin;\n    return `${baseUrl}?convite=${code}`;\n  };\n\n  return {\n    links,\n    isLoading,\n    createInviteLink,\n    deactivateLink,\n    getInviteURL,\n    refreshLinks: loadLinks,\n    activeLinks: links.filter(l => l.is_active && l.uses_count < l.max_uses),\n  };\n}\n\n/** Gerar codigo de convite legivel (6 chars alfanumericos) */\nfunction generateInviteCode(): string {\n  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem I, O, 0, 1 (evita confusao)\n  let code = '';\n  for (let i = 0; i < 6; i++) {\n    code += chars[Math.floor(Math.random() * chars.length)];\n  }\n  return code;\n}\n"
+/**
+ * useInviteLinks — Hook para convites por link rastreado
+ * v1.1: Crescimento viral controlado
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, TIMEOUTS } from './supabase';
+
+export interface InviteLink {
+  id: string;
+  inviter_id: string;
+  code: string;
+  max_uses: number;
+  uses_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export function useInviteLinks() {
+  const [links, setLinks] = useState<InviteLink[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadLinks = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('invite_links')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+      if (error) throw error;
+      setLinks((data || []) as InviteLink[]);
+    } catch (err) {
+      console.error('[useInviteLinks] Erro:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLinks();
+  }, [loadLinks]);
+
+  /** Gerar novo link de convite */
+  const createInviteLink = useCallback(async (
+    maxUses: number = 5,
+    expiresInDays?: number
+  ): Promise<{ success: boolean; code?: string; error?: string }> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      // Gerar codigo unico
+      const code = generateInviteCode();
+
+      const expiresAt = expiresInDays
+        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+      const { error: insertError } = await supabase
+        .from('invite_links')
+        .insert({
+          inviter_id: user.id,
+          code,
+          max_uses: Math.min(maxUses, 20), // max 20 usos por link
+          expires_at: expiresAt,
+        });
+
+      if (insertError) throw insertError;
+
+      await loadLinks();
+      return { success: true, code };
+    } catch (err: any) {
+      console.error('[useInviteLinks] Erro ao criar:', err);
+      return { success: false, error: err.message || 'Erro ao criar convite' };
+    }
+  }, [loadLinks]);
+
+  /** Desativar link */
+  const deactivateLink = useCallback(async (linkId: string) => {
+    try {
+      await supabase
+        .from('invite_links')
+        .update({ is_active: false })
+        .eq('id', linkId);
+      await loadLinks();
+    } catch (err) {
+      console.error('[useInviteLinks] Erro ao desativar:', err);
+    }
+  }, [loadLinks]);
+
+  /** Gerar URL completa do convite */
+  const getInviteURL = (code: string): string => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}?convite=${code}`;
+  };
+
+  return {
+    links,
+    isLoading,
+    createInviteLink,
+    deactivateLink,
+    getInviteURL,
+    refreshLinks: loadLinks,
+    activeLinks: links.filter(l => l.is_active && l.uses_count < l.max_uses),
+  };
+}
+
+/** Gerar codigo de convite legivel (6 chars alfanumericos) */
+function generateInviteCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem I, O, 0, 1 (evita confusao)
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
 }

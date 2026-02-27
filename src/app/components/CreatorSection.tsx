@@ -1,7 +1,143 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/CreatorSection.tsx",
-  "created_at": "2026-02-27T05:36:12.494Z",
-  "file_content": "import { motion } from \"motion/react\";\nimport { Quote } from \"lucide-react\";\nimport { useState } from \"react\";\n\nconst milaImg = \"/mila-creator.png\";\n\nexport function CreatorSection() {\n  const [imgError, setImgError] = useState(false);\n\n  return (\n    <section className=\"w-full py-12 md:py-16\" style={{ background: \"#C8C8C8\" }}>\n      <div className=\"mx-auto max-w-[1100px] px-6 lg:px-8\">\n        {/* Título */}\n        <motion.h2\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6 }}\n          className=\"text-3xl md:text-4xl lg:text-5xl mb-10 text-center font-semibold text-[#1A1A1A]\"\n        >\n          Criadora deste espaço\n        </motion.h2>\n\n        <div className=\"flex flex-col lg:flex-row gap-10 lg:gap-16 items-start\">\n          {/* Imagem com efeito parallax */}\n          <motion.div\n            initial={{ opacity: 0, x: -30 }}\n            whileInView={{ opacity: 1, x: 0 }}\n            viewport={{ once: true }}\n            transition={{ duration: 0.8 }}\n            className=\"w-full lg:w-4/12\"\n          >\n            <div className=\"relative group\">\n              <motion.div\n                whileHover={{ scale: 1.02 }}\n                transition={{ duration: 0.3 }}\n                className=\"aspect-square max-w-[280px] mx-auto rounded-3xl overflow-hidden shadow-xl ring-4 ring-[#81D8D0]/20\"\n              >\n                {imgError ? (\n                  <div className=\"w-full h-full bg-gradient-to-br from-[#C8102E]/30 to-[#81D8D0]/30 flex items-center justify-center\">\n                    <span className=\"text-6xl text-white/60 font-bold\">M</span>\n                  </div>\n                ) : (\n                  <img\n                    src={milaImg}\n                    alt=\"Mila, criadora da NeuroConexão Atípica\"\n                    className=\"w-full h-full object-cover transition-transform duration-700 group-hover:scale-105\"\n                    onError={() => setImgError(true)}\n                  />\n                )}\n              </motion.div>\n              \n              {/* Elemento decorativo - Tiffany (campo de segurança) */}\n              <div className=\"absolute -bottom-6 -right-6 w-40 h-40 bg-[#81D8D0]/20 rounded-3xl -z-10 blur-2xl\" />\n            </div>\n          </motion.div>\n\n          {/* Texto */}\n          <div className=\"w-full lg:w-7/12 space-y-6\">\n            {/* Quote icon - Vermelho (pulsão) */}\n            <motion.div\n              initial={{ opacity: 0 }}\n              whileInView={{ opacity: 0.15 }}\n              viewport={{ once: true }}\n              transition={{ duration: 0.6 }}\n            >\n              <Quote className=\"h-16 w-16 text-[#C8102E]\" />\n            </motion.div>\n\n            {/* Parágrafos com animação stagger */}\n            <motion.div\n              initial=\"hidden\"\n              whileInView=\"visible\"\n              viewport={{ once: true, margin: \"-100px\" }}\n              variants={{\n                visible: {\n                  transition: {\n                    staggerChildren: 0.15\n                  }\n                }\n              }}\n              className=\"space-y-6 text-lg md:text-xl leading-relaxed text-[#333]\"\n            >\n              <motion.p\n                variants={{\n                  hidden: { opacity: 0, y: 20 },\n                  visible: { opacity: 1, y: 0 }\n                }}\n              >\n                <strong className=\"text-2xl font-bold\">Sou a Mila.</strong><br />\n                Há 31 anos sentindo demais.\n              </motion.p>\n\n              <motion.p\n                variants={{\n                  hidden: { opacity: 0, y: 20 },\n                  visible: { opacity: 1, y: 0 }\n                }}\n                className=\"font-medium\"\n              >\n                TDAH, bipolar, e alguém que aprendeu cedo que sentir fundo, muitas vezes, é sentir sozinha.\n              </motion.p>\n\n              <motion.p\n                variants={{\n                  hidden: { opacity: 0, y: 20 },\n                  visible: { opacity: 1, y: 0 }\n                }}\n              >\n                O NeuroConexão Atípica nasceu de uma necessidade real: criar um lugar onde intensidade não fosse tratada como defeito e onde cuidado não precisasse vir acompanhado de culpa, vergonha ou silêncio.\n              </motion.p>\n\n              <motion.div\n                variants={{\n                  hidden: { opacity: 0, y: 20 },\n                  visible: { opacity: 1, y: 0 }\n                }}\n                className=\"border-l-4 border-[#C8102E] pl-6 py-2 bg-[#C8102E]/5 rounded-r-lg\"\n              >\n                <p className=\"italic font-medium\">\n                  Não sou especialista na sua vida.<br />\n                  Não estou aqui para te consertar<br />\n                  nem para te dizer como sentir.\n                </p>\n              </motion.div>\n\n              <motion.p\n                variants={{\n                  hidden: { opacity: 0, y: 20 },\n                  visible: { opacity: 1, y: 0 }\n                }}\n                className=\"font-bold text-[#C8102E]\"\n              >\n                Sou alguém que construiu o espaço que precisou<br />\n                e que talvez você também estivesse procurando.\n              </motion.p>\n            </motion.div>\n          </div>\n        </div>\n      </div>\n    </section>\n  );\n}"
+import { motion } from "motion/react";
+import { Quote } from "lucide-react";
+import { useState } from "react";
+
+const milaImg = "/mila-creator.png";
+
+export function CreatorSection() {
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <section className="w-full py-12 md:py-16" style={{ background: "#C8C8C8" }}>
+      <div className="mx-auto max-w-[1100px] px-6 lg:px-8">
+        {/* Título */}
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-3xl md:text-4xl lg:text-5xl mb-10 text-center font-semibold text-[#1A1A1A]"
+        >
+          Criadora deste espaço
+        </motion.h2>
+
+        <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
+          {/* Imagem com efeito parallax */}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="w-full lg:w-4/12"
+          >
+            <div className="relative group">
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.3 }}
+                className="aspect-square max-w-[280px] mx-auto rounded-3xl overflow-hidden shadow-xl ring-4 ring-[#81D8D0]/20"
+              >
+                {imgError ? (
+                  <div className="w-full h-full bg-gradient-to-br from-[#C8102E]/30 to-[#81D8D0]/30 flex items-center justify-center">
+                    <span className="text-6xl text-white/60 font-bold">M</span>
+                  </div>
+                ) : (
+                  <img
+                    src={milaImg}
+                    alt="Mila, criadora da NeuroConexão Atípica"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={() => setImgError(true)}
+                  />
+                )}
+              </motion.div>
+              
+              {/* Elemento decorativo - Tiffany (campo de segurança) */}
+              <div className="absolute -bottom-6 -right-6 w-40 h-40 bg-[#81D8D0]/20 rounded-3xl -z-10 blur-2xl" />
+            </div>
+          </motion.div>
+
+          {/* Texto */}
+          <div className="w-full lg:w-7/12 space-y-6">
+            {/* Quote icon - Vermelho (pulsão) */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 0.15 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <Quote className="h-16 w-16 text-[#C8102E]" />
+            </motion.div>
+
+            {/* Parágrafos com animação stagger */}
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={{
+                visible: {
+                  transition: {
+                    staggerChildren: 0.15
+                  }
+                }
+              }}
+              className="space-y-6 text-lg md:text-xl leading-relaxed text-[#333]"
+            >
+              <motion.p
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+              >
+                <strong className="text-2xl font-bold">Sou a Mila.</strong><br />
+                Há 31 anos sentindo demais.
+              </motion.p>
+
+              <motion.p
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+                className="font-medium"
+              >
+                TDAH, bipolar, e alguém que aprendeu cedo que sentir fundo, muitas vezes, é sentir sozinha.
+              </motion.p>
+
+              <motion.p
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+              >
+                O NeuroConexão Atípica nasceu de uma necessidade real: criar um lugar onde intensidade não fosse tratada como defeito e onde cuidado não precisasse vir acompanhado de culpa, vergonha ou silêncio.
+              </motion.p>
+
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+                className="border-l-4 border-[#C8102E] pl-6 py-2 bg-[#C8102E]/5 rounded-r-lg"
+              >
+                <p className="italic font-medium">
+                  Não sou especialista na sua vida.<br />
+                  Não estou aqui para te consertar<br />
+                  nem para te dizer como sentir.
+                </p>
+              </motion.div>
+
+              <motion.p
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+                className="font-bold text-[#C8102E]"
+              >
+                Sou alguém que construiu o espaço que precisou<br />
+                e que talvez você também estivesse procurando.
+              </motion.p>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }

@@ -1,7 +1,77 @@
-{
-  "lote": 6,
-  "status": "pending",
-  "file_path": "src/app/components/ui/input-otp.tsx",
-  "created_at": "2026-02-27T05:36:35.643Z",
-  "file_content": "\"use client\";\n\nimport * as React from \"react\";\nimport { OTPInput, OTPInputContext } from \"input-otp\";\nimport { MinusIcon } from \"lucide-react\";\n\nimport { cn } from \"./utils\";\n\nfunction InputOTP({\n  className,\n  containerClassName,\n  ...props\n}: React.ComponentProps<typeof OTPInput> & {\n  containerClassName?: string;\n}) {\n  return (\n    <OTPInput\n      data-slot=\"input-otp\"\n      containerClassName={cn(\n        \"flex items-center gap-2 has-disabled:opacity-50\",\n        containerClassName,\n      )}\n      className={cn(\"disabled:cursor-not-allowed\", className)}\n      {...props}\n    />\n  );\n}\n\nfunction InputOTPGroup({ className, ...props }: React.ComponentProps<\"div\">) {\n  return (\n    <div\n      data-slot=\"input-otp-group\"\n      className={cn(\"flex items-center gap-1\", className)}\n      {...props}\n    />\n  );\n}\n\nfunction InputOTPSlot({\n  index,\n  className,\n  ...props\n}: React.ComponentProps<\"div\"> & {\n  index: number;\n}) {\n  const inputOTPContext = React.useContext(OTPInputContext);\n  const { char, hasFakeCaret, isActive } = inputOTPContext?.slots[index] ?? {};\n\n  return (\n    <div\n      data-slot=\"input-otp-slot\"\n      data-active={isActive}\n      className={cn(\n        \"data-[active=true]:border-ring data-[active=true]:ring-ring/50 data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40 aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive dark:bg-input/30 border-input relative flex h-9 w-9 items-center justify-center border-y border-r text-sm bg-input-background transition-all outline-none first:rounded-l-md first:border-l last:rounded-r-md data-[active=true]:z-10 data-[active=true]:ring-[3px]\",\n        className,\n      )}\n      {...props}\n    >\n      {char}\n      {hasFakeCaret && (\n        <div className=\"pointer-events-none absolute inset-0 flex items-center justify-center\">\n          <div className=\"animate-caret-blink bg-foreground h-4 w-px duration-1000\" />\n        </div>\n      )}\n    </div>\n  );\n}\n\nfunction InputOTPSeparator({ ...props }: React.ComponentProps<\"div\">) {\n  return (\n    <div data-slot=\"input-otp-separator\" role=\"separator\" {...props}>\n      <MinusIcon />\n    </div>\n  );\n}\n\nexport { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator };\n"
+"use client";
+
+import * as React from "react";
+import { OTPInput, OTPInputContext } from "input-otp";
+import { MinusIcon } from "lucide-react";
+
+import { cn } from "./utils";
+
+function InputOTP({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<typeof OTPInput> & {
+  containerClassName?: string;
+}) {
+  return (
+    <OTPInput
+      data-slot="input-otp"
+      containerClassName={cn(
+        "flex items-center gap-2 has-disabled:opacity-50",
+        containerClassName,
+      )}
+      className={cn("disabled:cursor-not-allowed", className)}
+      {...props}
+    />
+  );
 }
+
+function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="input-otp-group"
+      className={cn("flex items-center gap-1", className)}
+      {...props}
+    />
+  );
+}
+
+function InputOTPSlot({
+  index,
+  className,
+  ...props
+}: React.ComponentProps<"div"> & {
+  index: number;
+}) {
+  const inputOTPContext = React.useContext(OTPInputContext);
+  const { char, hasFakeCaret, isActive } = inputOTPContext?.slots[index] ?? {};
+
+  return (
+    <div
+      data-slot="input-otp-slot"
+      data-active={isActive}
+      className={cn(
+        "data-[active=true]:border-ring data-[active=true]:ring-ring/50 data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40 aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive dark:bg-input/30 border-input relative flex h-9 w-9 items-center justify-center border-y border-r text-sm bg-input-background transition-all outline-none first:rounded-l-md first:border-l last:rounded-r-md data-[active=true]:z-10 data-[active=true]:ring-[3px]",
+        className,
+      )}
+      {...props}
+    >
+      {char}
+      {hasFakeCaret && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="animate-caret-blink bg-foreground h-4 w-px duration-1000" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
+  return (
+    <div data-slot="input-otp-separator" role="separator" {...props}>
+      <MinusIcon />
+    </div>
+  );
+}
+
+export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator };

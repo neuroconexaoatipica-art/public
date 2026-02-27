@@ -1,7 +1,206 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/SearchModal.tsx",
-  "created_at": "2026-02-27T05:36:22.250Z",
-  "file_content": "import { useState, useRef, useEffect, useCallback } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { Search, X, Users, FileText, User, Loader2 } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\ninterface SearchResult {\n  result_type: string;\n  result_id: string;\n  result_title: string;\n  result_preview: string;\n  result_score: number;\n}\n\ninterface SearchModalProps {\n  isOpen: boolean;\n  onClose: () => void;\n  onNavigateToProfile?: (userId: string) => void;\n  onNavigateToCommunity?: (communityId: string) => void;\n}\n\nconst TYPE_LABELS: Record<string, string> = {\n  post: \"Post\",\n  community: \"Comunidade\",\n  user: \"Membro\",\n};\n\nconst TYPE_ICONS: Record<string, typeof Search> = {\n  post: FileText,\n  community: Users,\n  user: User,\n};\n\nconst TYPE_COLORS: Record<string, string> = {\n  post: \"#81D8D0\",\n  community: \"#FF6B35\",\n  user: \"#C8102E\",\n};\n\nexport function SearchModal({ isOpen, onClose, onNavigateToProfile, onNavigateToCommunity }: SearchModalProps) {\n  const [query, setQuery] = useState(\"\");\n  const [results, setResults] = useState<SearchResult[]>([]);\n  const [isSearching, setIsSearching] = useState(false);\n  const [hasSearched, setHasSearched] = useState(false);\n  const inputRef = useRef<HTMLInputElement>(null);\n  const debounceRef = useRef<NodeJS.Timeout>();\n\n  useEffect(() => {\n    if (isOpen) {\n      setTimeout(() => inputRef.current?.focus(), 100);\n    } else {\n      setQuery(\"\");\n      setResults([]);\n      setHasSearched(false);\n    }\n  }, [isOpen]);\n\n  const doSearch = useCallback(async (searchQuery: string) => {\n    if (searchQuery.length < 2) {\n      setResults([]);\n      setHasSearched(false);\n      return;\n    }\n    setIsSearching(true);\n    setHasSearched(true);\n    try {\n      const { data, error } = await supabase.rpc(\"search_platform\", {\n        query_text: searchQuery,\n        result_limit: 20,\n      });\n      if (!error && data) {\n        setResults(data as SearchResult[]);\n      } else {\n        // Fallback: busca simples se a RPC não existir\n        const [postsRes, usersRes, commRes] = await Promise.all([\n          supabase.from(\"posts\").select(\"id, content\").ilike(\"content\", `%${searchQuery}%`).limit(5),\n          supabase.from(\"users\").select(\"id, name, display_name, bio\").or(`name.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%,bio.ilike.%${searchQuery}%`).limit(5),\n          supabase.from(\"communities\").select(\"id, name, description\").or(`name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`).limit(5),\n        ]);\n        const fallbackResults: SearchResult[] = [\n          ...(postsRes.data || []).map(p => ({ result_type: \"post\", result_id: p.id, result_title: p.content.slice(0, 60), result_preview: p.content.slice(0, 150), result_score: 1 })),\n          ...(usersRes.data || []).map(u => ({ result_type: \"user\", result_id: u.id, result_title: u.display_name || u.name, result_preview: u.bio || \"\", result_score: 1 })),\n          ...(commRes.data || []).map(c => ({ result_type: \"community\", result_id: c.id, result_title: c.name, result_preview: c.description || \"\", result_score: 1 })),\n        ];\n        setResults(fallbackResults);\n      }\n    } catch {\n      setResults([]);\n    }\n    setIsSearching(false);\n  }, []);\n\n  const handleInputChange = (value: string) => {\n    setQuery(value);\n    if (debounceRef.current) clearTimeout(debounceRef.current);\n    debounceRef.current = setTimeout(() => doSearch(value), 400);\n  };\n\n  const handleResultClick = (result: SearchResult) => {\n    if (result.result_type === \"user\" && onNavigateToProfile) {\n      onNavigateToProfile(result.result_id);\n      onClose();\n    } else if (result.result_type === \"community\" && onNavigateToCommunity) {\n      onNavigateToCommunity(result.result_id);\n      onClose();\n    }\n    // Posts: TODO — navegar para o post\n  };\n\n  if (!isOpen) return null;\n\n  return (\n    <AnimatePresence>\n      <motion.div\n        initial={{ opacity: 0 }}\n        animate={{ opacity: 1 }}\n        exit={{ opacity: 0 }}\n        className=\"fixed inset-0 z-[95] flex items-start justify-center pt-[10vh] bg-black/70 backdrop-blur-sm p-4\"\n        onClick={onClose}\n      >\n        <motion.div\n          initial={{ scale: 0.95, opacity: 0, y: -20 }}\n          animate={{ scale: 1, opacity: 1, y: 0 }}\n          exit={{ scale: 0.95, opacity: 0, y: -20 }}\n          onClick={(e) => e.stopPropagation()}\n          className=\"w-full max-w-xl bg-[#1E1E1E] border border-white/10 rounded-2xl overflow-hidden shadow-2xl\"\n        >\n          {/* Barra de busca */}\n          <div className=\"flex items-center gap-3 px-5 py-4 border-b border-white/8\">\n            <Search className=\"h-5 w-5 text-white/30 flex-shrink-0\" />\n            <input\n              ref={inputRef}\n              type=\"text\"\n              value={query}\n              onChange={(e) => handleInputChange(e.target.value)}\n              placeholder=\"Buscar posts, comunidades, membros...\"\n              className=\"flex-1 bg-transparent text-white text-sm placeholder:text-white/30 focus:outline-none\"\n            />\n            {query && (\n              <button onClick={() => { setQuery(\"\"); setResults([]); setHasSearched(false); }} className=\"text-white/30 hover:text-white/60\">\n                <X className=\"h-4 w-4\" />\n              </button>\n            )}\n          </div>\n\n          {/* Resultados */}\n          <div className=\"max-h-[400px] overflow-y-auto\">\n            {isSearching ? (\n              <div className=\"py-12 text-center\">\n                <Loader2 className=\"h-6 w-6 text-[#81D8D0] animate-spin mx-auto\" />\n                <p className=\"text-white/30 text-xs mt-2\">Buscando...</p>\n              </div>\n            ) : results.length > 0 ? (\n              <div className=\"py-2\">\n                {results.map((r, idx) => {\n                  const Icon = TYPE_ICONS[r.result_type] || Search;\n                  const color = TYPE_COLORS[r.result_type] || \"#999\";\n                  return (\n                    <motion.button\n                      key={`${r.result_type}-${r.result_id}-${idx}`}\n                      onClick={() => handleResultClick(r)}\n                      initial={{ opacity: 0, x: -10 }}\n                      animate={{ opacity: 1, x: 0 }}\n                      transition={{ delay: idx * 0.03 }}\n                      className=\"w-full flex items-start gap-3 px-5 py-3 text-left hover:bg-white/5 transition-colors\"\n                    >\n                      <div\n                        className=\"w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5\"\n                        style={{ background: `${color}12`, border: `1px solid ${color}20` }}\n                      >\n                        <Icon className=\"h-4 w-4\" style={{ color }} />\n                      </div>\n                      <div className=\"flex-1 min-w-0\">\n                        <div className=\"flex items-center gap-2\">\n                          <p className=\"text-white text-sm truncate\" style={{ fontWeight: 600 }}>{r.result_title}</p>\n                          <span className=\"text-[9px] uppercase text-white/25 bg-white/5 px-1.5 py-0.5 rounded\" style={{ fontWeight: 600 }}>\n                            {TYPE_LABELS[r.result_type]}\n                          </span>\n                        </div>\n                        {r.result_preview && (\n                          <p className=\"text-white/35 text-xs mt-0.5 truncate\">{r.result_preview}</p>\n                        )}\n                      </div>\n                    </motion.button>\n                  );\n                })}\n              </div>\n            ) : hasSearched ? (\n              <div className=\"py-12 text-center\">\n                <Search className=\"h-8 w-8 text-white/10 mx-auto mb-3\" />\n                <p className=\"text-white/40 text-sm\">Nenhum resultado para \"{query}\"</p>\n              </div>\n            ) : query.length > 0 && query.length < 2 ? (\n              <div className=\"py-8 text-center\">\n                <p className=\"text-white/30 text-xs\">Digite pelo menos 2 caracteres</p>\n              </div>\n            ) : (\n              <div className=\"py-8 text-center\">\n                <p className=\"text-white/20 text-xs\">Busque por posts, comunidades ou membros</p>\n              </div>\n            )}\n          </div>\n        </motion.div>\n      </motion.div>\n    </AnimatePresence>\n  );\n}"
+import { useState, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Search, X, Users, FileText, User, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+interface SearchResult {
+  result_type: string;
+  result_id: string;
+  result_title: string;
+  result_preview: string;
+  result_score: number;
+}
+
+interface SearchModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onNavigateToProfile?: (userId: string) => void;
+  onNavigateToCommunity?: (communityId: string) => void;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  post: "Post",
+  community: "Comunidade",
+  user: "Membro",
+};
+
+const TYPE_ICONS: Record<string, typeof Search> = {
+  post: FileText,
+  community: Users,
+  user: User,
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  post: "#81D8D0",
+  community: "#FF6B35",
+  user: "#C8102E",
+};
+
+export function SearchModal({ isOpen, onClose, onNavigateToProfile, onNavigateToCommunity }: SearchModalProps) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      setQuery("");
+      setResults([]);
+      setHasSearched(false);
+    }
+  }, [isOpen]);
+
+  const doSearch = useCallback(async (searchQuery: string) => {
+    if (searchQuery.length < 2) {
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+    setIsSearching(true);
+    setHasSearched(true);
+    try {
+      const { data, error } = await supabase.rpc("search_platform", {
+        query_text: searchQuery,
+        result_limit: 20,
+      });
+      if (!error && data) {
+        setResults(data as SearchResult[]);
+      } else {
+        // Fallback: busca simples se a RPC não existir
+        const [postsRes, usersRes, commRes] = await Promise.all([
+          supabase.from("posts").select("id, content").ilike("content", `%${searchQuery}%`).limit(5),
+          supabase.from("users").select("id, name, display_name, bio").or(`name.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%,bio.ilike.%${searchQuery}%`).limit(5),
+          supabase.from("communities").select("id, name, description").or(`name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`).limit(5),
+        ]);
+        const fallbackResults: SearchResult[] = [
+          ...(postsRes.data || []).map(p => ({ result_type: "post", result_id: p.id, result_title: p.content.slice(0, 60), result_preview: p.content.slice(0, 150), result_score: 1 })),
+          ...(usersRes.data || []).map(u => ({ result_type: "user", result_id: u.id, result_title: u.display_name || u.name, result_preview: u.bio || "", result_score: 1 })),
+          ...(commRes.data || []).map(c => ({ result_type: "community", result_id: c.id, result_title: c.name, result_preview: c.description || "", result_score: 1 })),
+        ];
+        setResults(fallbackResults);
+      }
+    } catch {
+      setResults([]);
+    }
+    setIsSearching(false);
+  }, []);
+
+  const handleInputChange = (value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(value), 400);
+  };
+
+  const handleResultClick = (result: SearchResult) => {
+    if (result.result_type === "user" && onNavigateToProfile) {
+      onNavigateToProfile(result.result_id);
+      onClose();
+    } else if (result.result_type === "community" && onNavigateToCommunity) {
+      onNavigateToCommunity(result.result_id);
+      onClose();
+    }
+    // Posts: TODO — navegar para o post
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[95] flex items-start justify-center pt-[10vh] bg-black/70 backdrop-blur-sm p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0, y: -20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.95, opacity: 0, y: -20 }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xl bg-[#1E1E1E] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        >
+          {/* Barra de busca */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-white/8">
+            <Search className="h-5 w-5 text-white/30 flex-shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => handleInputChange(e.target.value)}
+              placeholder="Buscar posts, comunidades, membros..."
+              className="flex-1 bg-transparent text-white text-sm placeholder:text-white/30 focus:outline-none"
+            />
+            {query && (
+              <button onClick={() => { setQuery(""); setResults([]); setHasSearched(false); }} className="text-white/30 hover:text-white/60">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Resultados */}
+          <div className="max-h-[400px] overflow-y-auto">
+            {isSearching ? (
+              <div className="py-12 text-center">
+                <Loader2 className="h-6 w-6 text-[#81D8D0] animate-spin mx-auto" />
+                <p className="text-white/30 text-xs mt-2">Buscando...</p>
+              </div>
+            ) : results.length > 0 ? (
+              <div className="py-2">
+                {results.map((r, idx) => {
+                  const Icon = TYPE_ICONS[r.result_type] || Search;
+                  const color = TYPE_COLORS[r.result_type] || "#999";
+                  return (
+                    <motion.button
+                      key={`${r.result_type}-${r.result_id}-${idx}`}
+                      onClick={() => handleResultClick(r)}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="w-full flex items-start gap-3 px-5 py-3 text-left hover:bg-white/5 transition-colors"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ background: `${color}12`, border: `1px solid ${color}20` }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-white text-sm truncate" style={{ fontWeight: 600 }}>{r.result_title}</p>
+                          <span className="text-[9px] uppercase text-white/25 bg-white/5 px-1.5 py-0.5 rounded" style={{ fontWeight: 600 }}>
+                            {TYPE_LABELS[r.result_type]}
+                          </span>
+                        </div>
+                        {r.result_preview && (
+                          <p className="text-white/35 text-xs mt-0.5 truncate">{r.result_preview}</p>
+                        )}
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : hasSearched ? (
+              <div className="py-12 text-center">
+                <Search className="h-8 w-8 text-white/10 mx-auto mb-3" />
+                <p className="text-white/40 text-sm">Nenhum resultado para "{query}"</p>
+              </div>
+            ) : query.length > 0 && query.length < 2 ? (
+              <div className="py-8 text-center">
+                <p className="text-white/30 text-xs">Digite pelo menos 2 caracteres</p>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-white/20 text-xs">Busque por posts, comunidades ou membros</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }

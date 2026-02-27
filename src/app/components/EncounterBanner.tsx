@@ -1,7 +1,142 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/EncounterBanner.tsx",
-  "created_at": "2026-02-27T05:36:12.978Z",
-  "file_content": "import { useState } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { MapPin, Bell, Check, X } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\nexport function EncounterBanner() {\n  const [wantsNotify, setWantsNotify] = useState(false);\n  const [showForm, setShowForm] = useState(false);\n  const [email, setEmail] = useState(\"\");\n  const [submitted, setSubmitted] = useState(false);\n  const [loading, setLoading] = useState(false);\n\n  const handleSubmit = async () => {\n    if (!email.includes(\"@\")) return;\n    setLoading(true);\n    try {\n      await supabase.from(\"contact_requests\").insert({\n        reason: \"other\",\n        message: `[ENCONTRO SP] Email para aviso: ${email}`,\n        status: \"pending\",\n      });\n    } catch {\n      // Silencioso — nao punir usuario\n    }\n    setLoading(false);\n    setSubmitted(true);\n    setShowForm(false);\n  };\n\n  return (\n    <section className=\"w-full py-12 md:py-16\" style={{ background: \"#1A1A1A\" }}>\n      <div className=\"mx-auto max-w-[900px] px-6 lg:px-8\">\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          className=\"relative overflow-hidden rounded-2xl p-8 md:p-12 text-center\"\n          style={{ background: \"linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)\", border: \"2px solid rgba(255,107,53,0.3)\" }}\n        >\n          {/* Glow */}\n          <div className=\"absolute inset-0 pointer-events-none\">\n            <div className=\"absolute top-0 right-0 w-40 h-40 bg-[#FF6B35]/10 rounded-full blur-3xl\" />\n            <div className=\"absolute bottom-0 left-0 w-32 h-32 bg-[#C8102E]/8 rounded-full blur-3xl\" />\n          </div>\n\n          <div className=\"relative\">\n            {/* Badge */}\n            <motion.div\n              animate={{ y: [0, -3, 0] }}\n              transition={{ duration: 3, repeat: Infinity }}\n              className=\"inline-flex items-center gap-2 bg-[#FF6B35]/15 border border-[#FF6B35]/30 rounded-full px-4 py-2 mb-6\"\n            >\n              <MapPin className=\"h-4 w-4 text-[#FF6B35]\" />\n              <span className=\"text-sm text-[#FF6B35]\" style={{ fontWeight: 700 }}>ENCONTRO PRESENCIAL</span>\n            </motion.div>\n\n            {/* Title */}\n            <h2 className=\"text-3xl md:text-4xl text-white mb-3\" style={{ fontWeight: 700 }}>\n              Encontro SP — Junho 2026\n            </h2>\n            <p className=\"text-lg text-white/60 mb-8 max-w-lg mx-auto\">\n              Em organizacao. O primeiro encontro presencial da comunidade. Saindo da tela. Entrando na vida.\n            </p>\n\n            {/* CTA */}\n            {submitted ? (\n              <motion.div\n                initial={{ scale: 0.9, opacity: 0 }}\n                animate={{ scale: 1, opacity: 1 }}\n                className=\"inline-flex items-center gap-2 px-6 py-3 bg-[#0A8F85] text-white rounded-xl\"\n                style={{ fontWeight: 600 }}\n              >\n                <Check className=\"h-5 w-5\" />\n                Voce sera avisado!\n              </motion.div>\n            ) : showForm ? (\n              <AnimatePresence>\n                <motion.div\n                  initial={{ opacity: 0, y: 10 }}\n                  animate={{ opacity: 1, y: 0 }}\n                  className=\"flex flex-col sm:flex-row items-center gap-3 max-w-md mx-auto\"\n                >\n                  <input\n                    type=\"email\"\n                    value={email}\n                    onChange={(e) => setEmail(e.target.value)}\n                    placeholder=\"Seu melhor email\"\n                    className=\"flex-1 w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-white/40 focus:border-[#FF6B35]/50 focus:outline-none text-sm\"\n                  />\n                  <div className=\"flex gap-2\">\n                    <motion.button\n                      onClick={handleSubmit}\n                      disabled={loading || !email.includes(\"@\")}\n                      whileHover={{ scale: 1.02 }}\n                      whileTap={{ scale: 0.98 }}\n                      className=\"px-6 py-3 bg-[#FF6B35] text-white rounded-xl text-sm disabled:opacity-50 transition-opacity\"\n                      style={{ fontWeight: 700 }}\n                    >\n                      {loading ? \"Enviando...\" : \"Quero ser avisado\"}\n                    </motion.button>\n                    <button\n                      onClick={() => setShowForm(false)}\n                      className=\"p-3 text-white/40 hover:text-white/70 transition-colors\"\n                    >\n                      <X className=\"h-4 w-4\" />\n                    </button>\n                  </div>\n                </motion.div>\n              </AnimatePresence>\n            ) : (\n              <div className=\"flex flex-col sm:flex-row items-center justify-center gap-4\">\n                <motion.button\n                  onClick={() => setShowForm(true)}\n                  whileHover={{ scale: 1.03, y: -1 }}\n                  whileTap={{ scale: 0.98 }}\n                  className=\"inline-flex items-center gap-2 px-8 py-4 bg-[#FF6B35] text-white rounded-xl shadow-lg hover:shadow-xl transition-all\"\n                  style={{ fontWeight: 700 }}\n                >\n                  <Bell className=\"h-5 w-5\" />\n                  Quero ser avisado\n                </motion.button>\n                <motion.button\n                  onClick={() => setWantsNotify(!wantsNotify)}\n                  whileTap={{ scale: 0.95 }}\n                  className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm border transition-all ${\n                    wantsNotify\n                      ? \"bg-white/10 text-white border-white/30\"\n                      : \"bg-transparent text-white/50 border-white/10 hover:border-white/25\"\n                  }`}\n                  style={{ fontWeight: 600 }}\n                >\n                  <MapPin className=\"h-4 w-4\" />\n                  {wantsNotify ? \"Sou de SP — anotado!\" : \"Sou de SP / regiao\"}\n                </motion.button>\n              </div>\n            )}\n          </div>\n        </motion.div>\n      </div>\n    </section>\n  );\n}\n"
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { MapPin, Bell, Check, X } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+export function EncounterBanner() {
+  const [wantsNotify, setWantsNotify] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email.includes("@")) return;
+    setLoading(true);
+    try {
+      await supabase.from("contact_requests").insert({
+        reason: "other",
+        message: `[ENCONTRO SP] Email para aviso: ${email}`,
+        status: "pending",
+      });
+    } catch {
+      // Silencioso — nao punir usuario
+    }
+    setLoading(false);
+    setSubmitted(true);
+    setShowForm(false);
+  };
+
+  return (
+    <section className="w-full py-12 md:py-16" style={{ background: "#1A1A1A" }}>
+      <div className="mx-auto max-w-[900px] px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="relative overflow-hidden rounded-2xl p-8 md:p-12 text-center"
+          style={{ background: "linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)", border: "2px solid rgba(255,107,53,0.3)" }}
+        >
+          {/* Glow */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-[#FF6B35]/10 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#C8102E]/8 rounded-full blur-3xl" />
+          </div>
+
+          <div className="relative">
+            {/* Badge */}
+            <motion.div
+              animate={{ y: [0, -3, 0] }}
+              transition={{ duration: 3, repeat: Infinity }}
+              className="inline-flex items-center gap-2 bg-[#FF6B35]/15 border border-[#FF6B35]/30 rounded-full px-4 py-2 mb-6"
+            >
+              <MapPin className="h-4 w-4 text-[#FF6B35]" />
+              <span className="text-sm text-[#FF6B35]" style={{ fontWeight: 700 }}>ENCONTRO PRESENCIAL</span>
+            </motion.div>
+
+            {/* Title */}
+            <h2 className="text-3xl md:text-4xl text-white mb-3" style={{ fontWeight: 700 }}>
+              Encontro SP — Junho 2026
+            </h2>
+            <p className="text-lg text-white/60 mb-8 max-w-lg mx-auto">
+              Em organizacao. O primeiro encontro presencial da comunidade. Saindo da tela. Entrando na vida.
+            </p>
+
+            {/* CTA */}
+            {submitted ? (
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#0A8F85] text-white rounded-xl"
+                style={{ fontWeight: 600 }}
+              >
+                <Check className="h-5 w-5" />
+                Voce sera avisado!
+              </motion.div>
+            ) : showForm ? (
+              <AnimatePresence>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col sm:flex-row items-center gap-3 max-w-md mx-auto"
+                >
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Seu melhor email"
+                    className="flex-1 w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-white/40 focus:border-[#FF6B35]/50 focus:outline-none text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <motion.button
+                      onClick={handleSubmit}
+                      disabled={loading || !email.includes("@")}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="px-6 py-3 bg-[#FF6B35] text-white rounded-xl text-sm disabled:opacity-50 transition-opacity"
+                      style={{ fontWeight: 700 }}
+                    >
+                      {loading ? "Enviando..." : "Quero ser avisado"}
+                    </motion.button>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="p-3 text-white/40 hover:text-white/70 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <motion.button
+                  onClick={() => setShowForm(true)}
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-[#FF6B35] text-white rounded-xl shadow-lg hover:shadow-xl transition-all"
+                  style={{ fontWeight: 700 }}
+                >
+                  <Bell className="h-5 w-5" />
+                  Quero ser avisado
+                </motion.button>
+                <motion.button
+                  onClick={() => setWantsNotify(!wantsNotify)}
+                  whileTap={{ scale: 0.95 }}
+                  className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm border transition-all ${
+                    wantsNotify
+                      ? "bg-white/10 text-white border-white/30"
+                      : "bg-transparent text-white/50 border-white/10 hover:border-white/25"
+                  }`}
+                  style={{ fontWeight: 600 }}
+                >
+                  <MapPin className="h-4 w-4" />
+                  {wantsNotify ? "Sou de SP — anotado!" : "Sou de SP / regiao"}
+                </motion.button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
 }

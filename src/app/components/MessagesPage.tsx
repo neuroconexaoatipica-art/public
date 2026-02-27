@@ -1,7 +1,226 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/MessagesPage.tsx",
-  "created_at": "2026-02-27T05:36:26.415Z",
-  "file_content": "import { useState, useEffect, useRef } from \"react\";\nimport { ArrowLeft, Send } from \"lucide-react\";\nimport { usePrivateMessages, useProfileContext } from \"../../lib\";\nimport type { Conversation } from \"../../lib\";\nimport { UserAvatar } from \"./UserAvatar\";\n\ninterface MessagesPageProps {\n  onBack: () => void;\n  onNavigateToProfile?: (userId: string) => void;\n  initialConversationUserId?: string | null;\n}\n\nexport function MessagesPage({ onBack, onNavigateToProfile, initialConversationUserId }: MessagesPageProps) {\n  const { user } = useProfileContext();\n  const [activeConversation, setActiveConversation] = useState<string | null>(initialConversationUserId || null);\n\n  if (!user) return null;\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      <header className=\"sticky top-0 z-40 bg-[#35363A] border-b border-white/10\">\n        <div className=\"max-w-3xl mx-auto px-4 py-3 flex items-center gap-3\">\n          <button onClick={activeConversation ? () => setActiveConversation(null) : onBack} className=\"text-[#81D8D0] hover:text-white transition-colors\">\n            <ArrowLeft className=\"w-5 h-5\" />\n          </button>\n          <h1 className=\"text-white font-semibold\">\n            {activeConversation ? \"Conversa\" : \"Mensagens\"}\n          </h1>\n        </div>\n      </header>\n\n      <div className=\"max-w-3xl mx-auto\">\n        {activeConversation ? (\n          <ConversationView\n            otherUserId={activeConversation}\n            currentUserId={user.id}\n            onNavigateToProfile={onNavigateToProfile}\n          />\n        ) : (\n          <ConversationsList\n            onSelectConversation={setActiveConversation}\n            onNavigateToProfile={onNavigateToProfile}\n          />\n        )}\n      </div>\n    </div>\n  );\n}\n\n// Lista de conversas\nfunction ConversationsList({\n  onSelectConversation,\n  onNavigateToProfile,\n}: {\n  onSelectConversation: (userId: string) => void;\n  onNavigateToProfile?: (userId: string) => void;\n}) {\n  const { conversations, isLoading } = usePrivateMessages();\n\n  if (isLoading) {\n    return (\n      <div className=\"flex items-center justify-center py-16\">\n        <div className=\"w-8 h-8 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin\" />\n      </div>\n    );\n  }\n\n  if (conversations.length === 0) {\n    return (\n      <div className=\"text-center py-16 px-6\">\n        <div className=\"text-5xl mb-4\">💬</div>\n        <h2 className=\"text-white text-xl font-semibold mb-2\">Nenhuma conversa ainda</h2>\n        <p className=\"text-white/50 text-sm\">Quando alguem te enviar uma mensagem, ela aparecera aqui.</p>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"divide-y divide-white/5\">\n      {conversations.map((conv: Conversation) => (\n        <button\n          key={conv.other_user_id}\n          onClick={() => onSelectConversation(conv.other_user_id)}\n          className=\"w-full flex items-center gap-3 px-4 py-4 hover:bg-white/5 transition-colors text-left\"\n        >\n          <div className=\"relative\">\n            <UserAvatar\n              name={conv.other_user_name}\n              photoUrl={conv.other_user_photo}\n              size=\"md\"\n            />\n            {conv.unread_count > 0 && (\n              <span className=\"absolute -top-1 -right-1 bg-[#C8102E] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-semibold\">\n                {conv.unread_count > 9 ? \"9+\" : conv.unread_count}\n              </span>\n            )}\n          </div>\n          <div className=\"flex-1 min-w-0\">\n            <div className=\"flex items-center justify-between\">\n              <span className=\"text-white font-medium truncate\">{conv.other_user_name}</span>\n              <span className=\"text-white/30 text-xs whitespace-nowrap ml-2\">\n                {formatTimeAgo(conv.last_message_at)}\n              </span>\n            </div>\n            <p className={`text-sm truncate mt-0.5 ${conv.unread_count > 0 ? \"text-white/80 font-medium\" : \"text-white/40\"}`}>\n              {conv.last_message}\n            </p>\n          </div>\n        </button>\n      ))}\n    </div>\n  );\n}\n\n// Conversa individual\nfunction ConversationView({\n  otherUserId,\n  currentUserId,\n  onNavigateToProfile,\n}: {\n  otherUserId: string;\n  currentUserId: string;\n  onNavigateToProfile?: (userId: string) => void;\n}) {\n  const { messages, isLoading, sendMessage } = usePrivateMessages(otherUserId);\n  const [text, setText] = useState(\"\");\n  const [sending, setSending] = useState(false);\n  const messagesEndRef = useRef<HTMLDivElement>(null);\n\n  useEffect(() => {\n    messagesEndRef.current?.scrollIntoView({ behavior: \"smooth\" });\n  }, [messages]);\n\n  const handleSend = async () => {\n    if (!text.trim() || sending) return;\n    setSending(true);\n    await sendMessage(otherUserId, text.trim());\n    setText(\"\");\n    setSending(false);\n  };\n\n  if (isLoading) {\n    return (\n      <div className=\"flex items-center justify-center py-16\">\n        <div className=\"w-8 h-8 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin\" />\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"flex flex-col\" style={{ height: \"calc(100vh - 57px)\" }}>\n      {/* Messages area */}\n      <div className=\"flex-1 overflow-y-auto px-4 py-4 space-y-3\">\n        {messages.length === 0 && (\n          <p className=\"text-white/30 text-sm text-center py-8\">Comece a conversa...</p>\n        )}\n        {messages.map((m) => {\n          const isMe = m.sender_id === currentUserId;\n          return (\n            <div key={m.id} className={`flex ${isMe ? \"justify-end\" : \"justify-start\"}`}>\n              <div className={`flex gap-2 max-w-[75%] ${isMe ? \"flex-row-reverse\" : \"\"}`}>\n                {!isMe && (\n                  <UserAvatar\n                    name={m.sender_data?.display_name || m.sender_data?.name || \"M\"}\n                    photoUrl={m.sender_data?.profile_photo}\n                    size=\"sm\"\n                    onClick={() => onNavigateToProfile?.(m.sender_id)}\n                  />\n                )}\n                <div>\n                  <div\n                    className={`rounded-2xl px-4 py-2.5 ${\n                      isMe\n                        ? \"bg-[#81D8D0] text-black rounded-br-md\"\n                        : \"bg-white/10 text-white rounded-bl-md\"\n                    }`}\n                  >\n                    <p className=\"text-sm whitespace-pre-wrap\">{m.content}</p>\n                  </div>\n                  <p className={`text-xs text-white/20 mt-1 ${isMe ? \"text-right\" : \"\"}`}>\n                    {new Date(m.created_at).toLocaleTimeString(\"pt-BR\", { hour: \"2-digit\", minute: \"2-digit\" })}\n                  </p>\n                </div>\n              </div>\n            </div>\n          );\n        })}\n        <div ref={messagesEndRef} />\n      </div>\n\n      {/* Input */}\n      <div className=\"border-t border-white/10 px-4 py-3 bg-[#111]\">\n        <div className=\"flex items-center gap-2\">\n          <input\n            value={text}\n            onChange={(e) => setText(e.target.value)}\n            onKeyDown={(e) => e.key === \"Enter\" && !e.shiftKey && handleSend()}\n            placeholder=\"Sua mensagem...\"\n            className=\"flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 text-sm\"\n          />\n          <button\n            onClick={handleSend}\n            disabled={!text.trim() || sending}\n            className=\"p-2.5 bg-[#81D8D0] text-black rounded-xl disabled:opacity-30 transition-opacity\"\n          >\n            <Send className=\"w-4 h-4\" />\n          </button>\n        </div>\n      </div>\n    </div>\n  );\n}\n\nfunction formatTimeAgo(dateStr: string): string {\n  const now = new Date();\n  const date = new Date(dateStr);\n  const diffMs = now.getTime() - date.getTime();\n  const diffMin = Math.floor(diffMs / 60000);\n  if (diffMin < 1) return \"agora\";\n  if (diffMin < 60) return `${diffMin}min`;\n  const diffH = Math.floor(diffMin / 60);\n  if (diffH < 24) return `${diffH}h`;\n  const diffD = Math.floor(diffH / 24);\n  if (diffD < 7) return `${diffD}d`;\n  return date.toLocaleDateString(\"pt-BR\", { day: \"2-digit\", month: \"short\" });\n}"
+import { useState, useEffect, useRef } from "react";
+import { ArrowLeft, Send } from "lucide-react";
+import { usePrivateMessages, useProfileContext } from "../../lib";
+import type { Conversation } from "../../lib";
+import { UserAvatar } from "./UserAvatar";
+
+interface MessagesPageProps {
+  onBack: () => void;
+  onNavigateToProfile?: (userId: string) => void;
+  initialConversationUserId?: string | null;
+}
+
+export function MessagesPage({ onBack, onNavigateToProfile, initialConversationUserId }: MessagesPageProps) {
+  const { user } = useProfileContext();
+  const [activeConversation, setActiveConversation] = useState<string | null>(initialConversationUserId || null);
+
+  if (!user) return null;
+
+  return (
+    <div className="min-h-screen bg-black">
+      <header className="sticky top-0 z-40 bg-[#35363A] border-b border-white/10">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button onClick={activeConversation ? () => setActiveConversation(null) : onBack} className="text-[#81D8D0] hover:text-white transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-white font-semibold">
+            {activeConversation ? "Conversa" : "Mensagens"}
+          </h1>
+        </div>
+      </header>
+
+      <div className="max-w-3xl mx-auto">
+        {activeConversation ? (
+          <ConversationView
+            otherUserId={activeConversation}
+            currentUserId={user.id}
+            onNavigateToProfile={onNavigateToProfile}
+          />
+        ) : (
+          <ConversationsList
+            onSelectConversation={setActiveConversation}
+            onNavigateToProfile={onNavigateToProfile}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lista de conversas
+function ConversationsList({
+  onSelectConversation,
+  onNavigateToProfile,
+}: {
+  onSelectConversation: (userId: string) => void;
+  onNavigateToProfile?: (userId: string) => void;
+}) {
+  const { conversations, isLoading } = usePrivateMessages();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-8 h-8 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (conversations.length === 0) {
+    return (
+      <div className="text-center py-16 px-6">
+        <div className="text-5xl mb-4">💬</div>
+        <h2 className="text-white text-xl font-semibold mb-2">Nenhuma conversa ainda</h2>
+        <p className="text-white/50 text-sm">Quando alguem te enviar uma mensagem, ela aparecera aqui.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-white/5">
+      {conversations.map((conv: Conversation) => (
+        <button
+          key={conv.other_user_id}
+          onClick={() => onSelectConversation(conv.other_user_id)}
+          className="w-full flex items-center gap-3 px-4 py-4 hover:bg-white/5 transition-colors text-left"
+        >
+          <div className="relative">
+            <UserAvatar
+              name={conv.other_user_name}
+              photoUrl={conv.other_user_photo}
+              size="md"
+            />
+            {conv.unread_count > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#C8102E] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-semibold">
+                {conv.unread_count > 9 ? "9+" : conv.unread_count}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="text-white font-medium truncate">{conv.other_user_name}</span>
+              <span className="text-white/30 text-xs whitespace-nowrap ml-2">
+                {formatTimeAgo(conv.last_message_at)}
+              </span>
+            </div>
+            <p className={`text-sm truncate mt-0.5 ${conv.unread_count > 0 ? "text-white/80 font-medium" : "text-white/40"}`}>
+              {conv.last_message}
+            </p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Conversa individual
+function ConversationView({
+  otherUserId,
+  currentUserId,
+  onNavigateToProfile,
+}: {
+  otherUserId: string;
+  currentUserId: string;
+  onNavigateToProfile?: (userId: string) => void;
+}) {
+  const { messages, isLoading, sendMessage } = usePrivateMessages(otherUserId);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    await sendMessage(otherUserId, text.trim());
+    setText("");
+    setSending(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-8 h-8 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col" style={{ height: "calc(100vh - 57px)" }}>
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {messages.length === 0 && (
+          <p className="text-white/30 text-sm text-center py-8">Comece a conversa...</p>
+        )}
+        {messages.map((m) => {
+          const isMe = m.sender_id === currentUserId;
+          return (
+            <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+              <div className={`flex gap-2 max-w-[75%] ${isMe ? "flex-row-reverse" : ""}`}>
+                {!isMe && (
+                  <UserAvatar
+                    name={m.sender_data?.display_name || m.sender_data?.name || "M"}
+                    photoUrl={m.sender_data?.profile_photo}
+                    size="sm"
+                    onClick={() => onNavigateToProfile?.(m.sender_id)}
+                  />
+                )}
+                <div>
+                  <div
+                    className={`rounded-2xl px-4 py-2.5 ${
+                      isMe
+                        ? "bg-[#81D8D0] text-black rounded-br-md"
+                        : "bg-white/10 text-white rounded-bl-md"
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                  </div>
+                  <p className={`text-xs text-white/20 mt-1 ${isMe ? "text-right" : ""}`}>
+                    {new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-white/10 px-4 py-3 bg-[#111]">
+        <div className="flex items-center gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            placeholder="Sua mensagem..."
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 text-sm"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!text.trim() || sending}
+            className="p-2.5 bg-[#81D8D0] text-black rounded-xl disabled:opacity-30 transition-opacity"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "agora";
+  if (diffMin < 60) return `${diffMin}min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}d`;
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }

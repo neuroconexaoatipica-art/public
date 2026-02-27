@@ -1,7 +1,305 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/security.ts",
-  "created_at": "2026-02-27T05:36:02.455Z",
-  "file_content": "/**\n * SECURITY UTILITIES — NeuroConexao Atipica\n * \n * Camada de seguranca do frontend:\n * - Sanitizacao de HTML (anti-XSS)\n * - Validacao de inputs\n * - Rate limiting local\n * - Whitelist de URLs\n * - Log de eventos de seguranca\n */\n\nimport DOMPurify from 'dompurify';\nimport { supabase } from './supabase';\n\n// ─── SANITIZACAO HTML (Anti-XSS) ──────────────────────────────────────────\n\n/**\n * Sanitiza HTML do usuario — OBRIGATORIO antes de dangerouslySetInnerHTML.\n * Remove scripts, event handlers, iframes maliciosos, etc.\n * Permite apenas tags seguras para conteudo de paginas legais.\n */\nexport function sanitizeHTML(dirty: string): string {\n  return DOMPurify.sanitize(dirty, {\n    ALLOWED_TAGS: [\n      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',\n      'p', 'br', 'hr',\n      'ul', 'ol', 'li',\n      'strong', 'em', 'b', 'i', 'u', 's', 'mark',\n      'a', 'blockquote', 'code', 'pre',\n      'table', 'thead', 'tbody', 'tr', 'th', 'td',\n      'div', 'span', 'section', 'article',\n      'img',\n    ],\n    ALLOWED_ATTR: [\n      'href', 'target', 'rel', 'title', 'alt',\n      'src', 'width', 'height',\n      'class', 'id',\n      'colspan', 'rowspan',\n    ],\n    ALLOW_DATA_ATTR: false,\n    ADD_ATTR: ['target'],\n    // Forcar target=\"_blank\" em links e adicionar rel seguro\n    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],\n    FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'onsubmit', 'onchange'],\n  });\n}\n\n/**\n * Remove TODAS as tags HTML — retorna texto puro.\n * Usar para: bio, about_text, nomes, comentarios, posts.\n */\nexport function stripHTML(input: string): string {\n  return DOMPurify.sanitize(input, { ALLOWED_TAGS: [] });\n}\n\n/**\n * Sanitiza texto de post/comentario — permite apenas formatting basico.\n */\nexport function sanitizePostContent(content: string): string {\n  return DOMPurify.sanitize(content, {\n    ALLOWED_TAGS: ['strong', 'em', 'b', 'i', 'br', 'p', 'a'],\n    ALLOWED_ATTR: ['href', 'target', 'rel'],\n    FORBID_ATTR: ['onerror', 'onclick', 'onload'],\n  });\n}\n\n// ─── VALIDACAO DE INPUTS ──────────────────────────────────────────────────\n\n/** Limpa e valida texto: trim + remove tags + max length */\nexport function cleanTextInput(input: string, maxLength: number = 500): string {\n  if (!input) return '';\n  return stripHTML(input.trim()).slice(0, maxLength);\n}\n\n/** Valida formato de email */\nexport function isValidEmail(email: string): boolean {\n  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;\n  return emailRegex.test(email.trim());\n}\n\n/** Valida formato de WhatsApp brasileiro */\nexport function isValidWhatsApp(phone: string): boolean {\n  if (!phone) return true; // opcional\n  const cleaned = phone.replace(/\\D/g, '');\n  // 10 ou 11 digitos (com DDD)\n  return cleaned.length === 10 || cleaned.length === 11;\n}\n\n/** Formata WhatsApp para armazenamento */\nexport function formatWhatsApp(phone: string): string {\n  return phone.replace(/\\D/g, '');\n}\n\n/** Valida forca da senha */\nexport function validatePassword(password: string): { valid: boolean; message: string } {\n  if (password.length < 8) {\n    return { valid: false, message: 'Senha deve ter no minimo 8 caracteres' };\n  }\n  if (password.length > 128) {\n    return { valid: false, message: 'Senha muito longa (max 128 caracteres)' };\n  }\n  return { valid: true, message: '' };\n}\n\n// ─── WHITELIST DE URLs ────────────────────────────────────────────────────\n\nconst ALLOWED_URL_DOMAINS = [\n  'youtube.com', 'www.youtube.com', 'youtu.be',\n  'vimeo.com', 'player.vimeo.com',\n  'meet.google.com',\n  'zoom.us',\n  'teams.microsoft.com',\n  'discord.gg',\n  'instagram.com', 'www.instagram.com',\n  // Supabase Storage\n  'ieieohtnaymykxiqnmlc.supabase.co',\n];\n\n/** Valida se URL esta na whitelist de dominios permitidos */\nexport function isAllowedURL(url: string): boolean {\n  if (!url) return false;\n  try {\n    const parsed = new URL(url);\n    return ALLOWED_URL_DOMAINS.some(domain => \n      parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)\n    );\n  } catch {\n    return false;\n  }\n}\n\n/** Valida se e uma URL valida (qualquer dominio) */\nexport function isValidURL(url: string): boolean {\n  if (!url) return false;\n  try {\n    new URL(url);\n    return true;\n  } catch {\n    return false;\n  }\n}\n\n// ─── VALIDACAO DE UPLOAD ──────────────────────────────────────────────────\n\nconst ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];\nconst MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB\n\n/** Valida arquivo de imagem para upload */\nexport function validateImageFile(file: File): { valid: boolean; message: string } {\n  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {\n    return { valid: false, message: 'Tipo de arquivo nao permitido. Use JPG, PNG, GIF ou WebP.' };\n  }\n  if (file.size > MAX_IMAGE_SIZE) {\n    return { valid: false, message: `Arquivo muito grande. Maximo: ${MAX_IMAGE_SIZE / 1024 / 1024}MB` };\n  }\n  return { valid: true, message: '' };\n}\n\n// ─── RATE LIMITING LOCAL ──────────────────────────────────────────────────\n\nconst rateLimitMap = new Map<string, { count: number; resetAt: number }>();\n\n/**\n * Rate limiter local (frontend) — protecao extra contra spam.\n * O backend (RLS + Supabase Auth) tem seu proprio rate limit.\n * Este e uma camada adicional de UX.\n */\nexport function checkRateLimit(action: string, maxAttempts: number, windowMs: number): { allowed: boolean; retryAfterMs: number } {\n  const now = Date.now();\n  const entry = rateLimitMap.get(action);\n\n  if (!entry || now > entry.resetAt) {\n    rateLimitMap.set(action, { count: 1, resetAt: now + windowMs });\n    return { allowed: true, retryAfterMs: 0 };\n  }\n\n  if (entry.count >= maxAttempts) {\n    return { allowed: false, retryAfterMs: entry.resetAt - now };\n  }\n\n  entry.count++;\n  return { allowed: true, retryAfterMs: 0 };\n}\n\n/** Rate limits pre-definidos */\nexport const RATE_LIMITS = {\n  /** Criar post: max 5 por minuto */\n  CREATE_POST: (action = 'create_post') => checkRateLimit(action, 5, 60_000),\n  /** Criar comentario: max 10 por minuto */\n  CREATE_COMMENT: (action = 'create_comment') => checkRateLimit(action, 10, 60_000),\n  /** Enviar formulario contato: max 3 por 5 minutos */\n  CONTACT_FORM: (action = 'contact_form') => checkRateLimit(action, 3, 300_000),\n  /** Enviar denuncia: max 5 por hora */\n  REPORT: (action = 'report') => checkRateLimit(action, 5, 3_600_000),\n  /** Enviar conexao: max 20 por hora */\n  CONNECTION: (action = 'connection') => checkRateLimit(action, 20, 3_600_000),\n  /** Enviar mensagem privada: max 30 por minuto */\n  PRIVATE_MESSAGE: (action = 'private_message') => checkRateLimit(action, 30, 60_000),\n  /** Enviar pergunta para live: max 5 por evento */\n  LIVE_QUESTION: (eventId: string) => checkRateLimit(`live_question_${eventId}`, 5, 3_600_000),\n} as const;\n\n// ─── LOG DE EVENTOS DE SEGURANCA ──────────────────────────────────────────\n\ntype SecurityEventType = \n  | 'failed_login'\n  | 'suspicious_signup'\n  | 'rate_limit_hit'\n  | 'rls_violation'\n  | 'admin_login'\n  | 'data_export'\n  | 'account_deleted'\n  | 'mass_report'\n  | 'content_flagged'\n  | 'unauthorized_access_attempt';\n\ntype Severity = 'low' | 'medium' | 'high' | 'critical';\n\n/**\n * Registra evento de seguranca no Supabase.\n * Fail-safe: nunca bloqueia a UI se der erro.\n */\nexport async function logSecurityEvent(\n  eventType: SecurityEventType,\n  severity: Severity,\n  metadata?: Record<string, unknown>\n): Promise<void> {\n  try {\n    const { data: { user } } = await supabase.auth.getUser();\n    \n    await supabase.from('security_events').insert({\n      event_type: eventType,\n      user_id: user?.id || null,\n      severity,\n      metadata: metadata || {},\n    });\n  } catch (err) {\n    // Silencioso — nunca bloqueia a UI por causa de log de seguranca\n    console.warn('[Security] Falha ao registrar evento:', err);\n  }\n}\n\n// ─── PROTECAO DE DADOS SENSIVEIS ──────────────────────────────────────────\n\n/** \n * Mascara email para exibicao publica.\n * ex: \"camila@gmail.com\" → \"c***a@g***l.com\"\n */\nexport function maskEmail(email: string): string {\n  const [local, domain] = email.split('@');\n  if (!domain) return '***';\n  const maskedLocal = local.length <= 2 \n    ? local[0] + '***' \n    : local[0] + '***' + local[local.length - 1];\n  const [domainName, ...tld] = domain.split('.');\n  const maskedDomain = domainName.length <= 2\n    ? domainName[0] + '***'\n    : domainName[0] + '***' + domainName[domainName.length - 1];\n  return `${maskedLocal}@${maskedDomain}.${tld.join('.')}`;\n}\n\n/**\n * Mascara WhatsApp para exibicao.\n * ex: \"11999887766\" → \"(11) *****-7766\"\n */\nexport function maskWhatsApp(phone: string): string {\n  const cleaned = phone.replace(/\\D/g, '');\n  if (cleaned.length < 10) return '***';\n  const ddd = cleaned.slice(0, 2);\n  const lastFour = cleaned.slice(-4);\n  return `(${ddd}) *****-${lastFour}`;\n}\n\n// ─── CONSTANTES DE SEGURANCA ──────────────────────────────────────────────\n\n/** UUID da super_admin (Mila) — NUNCA expor no frontend alem de checks internos */\nexport const SUPER_ADMIN_UUID = 'ce83116b-9593-49f5-a72a-032caa7283ad';\n\n/** Versao atual dos termos de uso */\nexport const CURRENT_TERMS_VERSION = '1.0';\n\n/** Idade minima obrigatoria */\nexport const MIN_AGE = 18;\n\n/** Tamanhos maximos de campos */\nexport const MAX_LENGTHS = {\n  NAME: 100,\n  DISPLAY_NAME: 50,\n  BIO: 280,\n  ABOUT_TEXT: 1000,\n  WHAT_CROSSES_ME: 1000,\n  DEEP_STATEMENT: 500,\n  POST_CONTENT: 5000,\n  COMMENT_CONTENT: 2000,\n  MESSAGE_CONTENT: 2000,\n  REPORT_REASON: 1000,\n  MANIFESTO: 5000,\n  EVENT_DESCRIPTION: 3000,\n  QUESTION_TEXT: 500,\n  TESTIMONIAL: 1000,\n  CONNECTION_NOTE: 500,\n  CALMING_STATEMENT: 500,\n  PRONOUNS: 30,\n  SOCIAL_HANDLE: 100,\n} as const;"
+/**
+ * SECURITY UTILITIES — NeuroConexao Atipica
+ * 
+ * Camada de seguranca do frontend:
+ * - Sanitizacao de HTML (anti-XSS)
+ * - Validacao de inputs
+ * - Rate limiting local
+ * - Whitelist de URLs
+ * - Log de eventos de seguranca
+ */
+
+import DOMPurify from 'dompurify';
+import { supabase } from './supabase';
+
+// ─── SANITIZACAO HTML (Anti-XSS) ──────────────────────────────────────────
+
+/**
+ * Sanitiza HTML do usuario — OBRIGATORIO antes de dangerouslySetInnerHTML.
+ * Remove scripts, event handlers, iframes maliciosos, etc.
+ * Permite apenas tags seguras para conteudo de paginas legais.
+ */
+export function sanitizeHTML(dirty: string): string {
+  return DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'p', 'br', 'hr',
+      'ul', 'ol', 'li',
+      'strong', 'em', 'b', 'i', 'u', 's', 'mark',
+      'a', 'blockquote', 'code', 'pre',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'div', 'span', 'section', 'article',
+      'img',
+    ],
+    ALLOWED_ATTR: [
+      'href', 'target', 'rel', 'title', 'alt',
+      'src', 'width', 'height',
+      'class', 'id',
+      'colspan', 'rowspan',
+    ],
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ['target'],
+    // Forcar target="_blank" em links e adicionar rel seguro
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
+    FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'onsubmit', 'onchange'],
+  });
 }
+
+/**
+ * Remove TODAS as tags HTML — retorna texto puro.
+ * Usar para: bio, about_text, nomes, comentarios, posts.
+ */
+export function stripHTML(input: string): string {
+  return DOMPurify.sanitize(input, { ALLOWED_TAGS: [] });
+}
+
+/**
+ * Sanitiza texto de post/comentario — permite apenas formatting basico.
+ */
+export function sanitizePostContent(content: string): string {
+  return DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: ['strong', 'em', 'b', 'i', 'br', 'p', 'a'],
+    ALLOWED_ATTR: ['href', 'target', 'rel'],
+    FORBID_ATTR: ['onerror', 'onclick', 'onload'],
+  });
+}
+
+// ─── VALIDACAO DE INPUTS ──────────────────────────────────────────────────
+
+/** Limpa e valida texto: trim + remove tags + max length */
+export function cleanTextInput(input: string, maxLength: number = 500): string {
+  if (!input) return '';
+  return stripHTML(input.trim()).slice(0, maxLength);
+}
+
+/** Valida formato de email */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(email.trim());
+}
+
+/** Valida formato de WhatsApp brasileiro */
+export function isValidWhatsApp(phone: string): boolean {
+  if (!phone) return true; // opcional
+  const cleaned = phone.replace(/\D/g, '');
+  // 10 ou 11 digitos (com DDD)
+  return cleaned.length === 10 || cleaned.length === 11;
+}
+
+/** Formata WhatsApp para armazenamento */
+export function formatWhatsApp(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+/** Valida forca da senha */
+export function validatePassword(password: string): { valid: boolean; message: string } {
+  if (password.length < 8) {
+    return { valid: false, message: 'Senha deve ter no minimo 8 caracteres' };
+  }
+  if (password.length > 128) {
+    return { valid: false, message: 'Senha muito longa (max 128 caracteres)' };
+  }
+  return { valid: true, message: '' };
+}
+
+// ─── WHITELIST DE URLs ────────────────────────────────────────────────────
+
+const ALLOWED_URL_DOMAINS = [
+  'youtube.com', 'www.youtube.com', 'youtu.be',
+  'vimeo.com', 'player.vimeo.com',
+  'meet.google.com',
+  'zoom.us',
+  'teams.microsoft.com',
+  'discord.gg',
+  'instagram.com', 'www.instagram.com',
+  // Supabase Storage
+  'ieieohtnaymykxiqnmlc.supabase.co',
+];
+
+/** Valida se URL esta na whitelist de dominios permitidos */
+export function isAllowedURL(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_URL_DOMAINS.some(domain => 
+      parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Valida se e uma URL valida (qualquer dominio) */
+export function isValidURL(url: string): boolean {
+  if (!url) return false;
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── VALIDACAO DE UPLOAD ──────────────────────────────────────────────────
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+
+/** Valida arquivo de imagem para upload */
+export function validateImageFile(file: File): { valid: boolean; message: string } {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { valid: false, message: 'Tipo de arquivo nao permitido. Use JPG, PNG, GIF ou WebP.' };
+  }
+  if (file.size > MAX_IMAGE_SIZE) {
+    return { valid: false, message: `Arquivo muito grande. Maximo: ${MAX_IMAGE_SIZE / 1024 / 1024}MB` };
+  }
+  return { valid: true, message: '' };
+}
+
+// ─── RATE LIMITING LOCAL ──────────────────────────────────────────────────
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+/**
+ * Rate limiter local (frontend) — protecao extra contra spam.
+ * O backend (RLS + Supabase Auth) tem seu proprio rate limit.
+ * Este e uma camada adicional de UX.
+ */
+export function checkRateLimit(action: string, maxAttempts: number, windowMs: number): { allowed: boolean; retryAfterMs: number } {
+  const now = Date.now();
+  const entry = rateLimitMap.get(action);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(action, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfterMs: 0 };
+  }
+
+  if (entry.count >= maxAttempts) {
+    return { allowed: false, retryAfterMs: entry.resetAt - now };
+  }
+
+  entry.count++;
+  return { allowed: true, retryAfterMs: 0 };
+}
+
+/** Rate limits pre-definidos */
+export const RATE_LIMITS = {
+  /** Criar post: max 5 por minuto */
+  CREATE_POST: (action = 'create_post') => checkRateLimit(action, 5, 60_000),
+  /** Criar comentario: max 10 por minuto */
+  CREATE_COMMENT: (action = 'create_comment') => checkRateLimit(action, 10, 60_000),
+  /** Enviar formulario contato: max 3 por 5 minutos */
+  CONTACT_FORM: (action = 'contact_form') => checkRateLimit(action, 3, 300_000),
+  /** Enviar denuncia: max 5 por hora */
+  REPORT: (action = 'report') => checkRateLimit(action, 5, 3_600_000),
+  /** Enviar conexao: max 20 por hora */
+  CONNECTION: (action = 'connection') => checkRateLimit(action, 20, 3_600_000),
+  /** Enviar mensagem privada: max 30 por minuto */
+  PRIVATE_MESSAGE: (action = 'private_message') => checkRateLimit(action, 30, 60_000),
+  /** Enviar pergunta para live: max 5 por evento */
+  LIVE_QUESTION: (eventId: string) => checkRateLimit(`live_question_${eventId}`, 5, 3_600_000),
+} as const;
+
+// ─── LOG DE EVENTOS DE SEGURANCA ──────────────────────────────────────────
+
+type SecurityEventType = 
+  | 'failed_login'
+  | 'suspicious_signup'
+  | 'rate_limit_hit'
+  | 'rls_violation'
+  | 'admin_login'
+  | 'data_export'
+  | 'account_deleted'
+  | 'mass_report'
+  | 'content_flagged'
+  | 'unauthorized_access_attempt';
+
+type Severity = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Registra evento de seguranca no Supabase.
+ * Fail-safe: nunca bloqueia a UI se der erro.
+ */
+export async function logSecurityEvent(
+  eventType: SecurityEventType,
+  severity: Severity,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    await supabase.from('security_events').insert({
+      event_type: eventType,
+      user_id: user?.id || null,
+      severity,
+      metadata: metadata || {},
+    });
+  } catch (err) {
+    // Silencioso — nunca bloqueia a UI por causa de log de seguranca
+    console.warn('[Security] Falha ao registrar evento:', err);
+  }
+}
+
+// ─── PROTECAO DE DADOS SENSIVEIS ──────────────────────────────────────────
+
+/** 
+ * Mascara email para exibicao publica.
+ * ex: "camila@gmail.com" → "c***a@g***l.com"
+ */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  const maskedLocal = local.length <= 2 
+    ? local[0] + '***' 
+    : local[0] + '***' + local[local.length - 1];
+  const [domainName, ...tld] = domain.split('.');
+  const maskedDomain = domainName.length <= 2
+    ? domainName[0] + '***'
+    : domainName[0] + '***' + domainName[domainName.length - 1];
+  return `${maskedLocal}@${maskedDomain}.${tld.join('.')}`;
+}
+
+/**
+ * Mascara WhatsApp para exibicao.
+ * ex: "11999887766" → "(11) *****-7766"
+ */
+export function maskWhatsApp(phone: string): string {
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length < 10) return '***';
+  const ddd = cleaned.slice(0, 2);
+  const lastFour = cleaned.slice(-4);
+  return `(${ddd}) *****-${lastFour}`;
+}
+
+// ─── CONSTANTES DE SEGURANCA ──────────────────────────────────────────────
+
+/** UUID da super_admin (Mila) — NUNCA expor no frontend alem de checks internos */
+export const SUPER_ADMIN_UUID = 'ce83116b-9593-49f5-a72a-032caa7283ad';
+
+/** Versao atual dos termos de uso */
+export const CURRENT_TERMS_VERSION = '1.0';
+
+/** Idade minima obrigatoria */
+export const MIN_AGE = 18;
+
+/** Tamanhos maximos de campos */
+export const MAX_LENGTHS = {
+  NAME: 100,
+  DISPLAY_NAME: 50,
+  BIO: 280,
+  ABOUT_TEXT: 1000,
+  WHAT_CROSSES_ME: 1000,
+  DEEP_STATEMENT: 500,
+  POST_CONTENT: 5000,
+  COMMENT_CONTENT: 2000,
+  MESSAGE_CONTENT: 2000,
+  REPORT_REASON: 1000,
+  MANIFESTO: 5000,
+  EVENT_DESCRIPTION: 3000,
+  QUESTION_TEXT: 500,
+  TESTIMONIAL: 1000,
+  CONNECTION_NOTE: 500,
+  CALMING_STATEMENT: 500,
+  PRONOUNS: 30,
+  SOCIAL_HANDLE: 100,
+} as const;

@@ -1,7 +1,93 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/lib/ModalContext.tsx",
-  "created_at": "2026-02-27T05:36:09.756Z",
-  "file_content": "/**\n * ModalContext — Gerencia estado global dos modais (signup, login, onboarding, contato)\n * Permite que qualquer componente dentro do Router abra/feche modais sem prop drilling.\n */\n\nimport { createContext, useContext, useState, useCallback } from 'react';\nimport type { ReactNode } from 'react';\n\ninterface ModalContextValue {\n  isSignupOpen: boolean;\n  isLoginOpen: boolean;\n  isOnboardingOpen: boolean;\n  isContactFounderOpen: boolean;\n  openSignup: () => void;\n  openLogin: () => void;\n  closeSignup: () => void;\n  closeLogin: () => void;\n  openOnboarding: () => void;\n  closeOnboarding: () => void;\n  openContactFounder: () => void;\n  closeContactFounder: () => void;\n  /** Signup concluido: fecha signup, abre onboarding */\n  handleSignupSuccess: () => void;\n  /** Login concluido: fecha login */\n  handleLoginSuccess: () => void;\n}\n\nconst ModalContext = createContext<ModalContextValue | null>(null);\n\nexport function ModalProvider({ children }: { children: ReactNode }) {\n  const [isSignupOpen, setIsSignupOpen] = useState(false);\n  const [isLoginOpen, setIsLoginOpen] = useState(false);\n  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);\n  const [isContactFounderOpen, setIsContactFounderOpen] = useState(false);\n\n  const openSignup = useCallback(() => {\n    setIsLoginOpen(false);\n    setIsSignupOpen(true);\n  }, []);\n\n  const openLogin = useCallback(() => {\n    setIsSignupOpen(false);\n    setIsLoginOpen(true);\n  }, []);\n\n  const closeSignup = useCallback(() => setIsSignupOpen(false), []);\n  const closeLogin = useCallback(() => setIsLoginOpen(false), []);\n  const openOnboarding = useCallback(() => setIsOnboardingOpen(true), []);\n  const closeOnboarding = useCallback(() => setIsOnboardingOpen(false), []);\n  const openContactFounder = useCallback(() => setIsContactFounderOpen(true), []);\n  const closeContactFounder = useCallback(() => setIsContactFounderOpen(false), []);\n\n  const handleSignupSuccess = useCallback(() => {\n    setIsSignupOpen(false);\n    setIsOnboardingOpen(true);\n  }, []);\n\n  const handleLoginSuccess = useCallback(() => {\n    setIsLoginOpen(false);\n    // ProfileProvider detecta SIGNED_IN e recarrega automaticamente\n  }, []);\n\n  return (\n    <ModalContext.Provider\n      value={{\n        isSignupOpen,\n        isLoginOpen,\n        isOnboardingOpen,\n        isContactFounderOpen,\n        openSignup,\n        openLogin,\n        closeSignup,\n        closeLogin,\n        openOnboarding,\n        closeOnboarding,\n        openContactFounder,\n        closeContactFounder,\n        handleSignupSuccess,\n        handleLoginSuccess,\n      }}\n    >\n      {children}\n    </ModalContext.Provider>\n  );\n}\n\nexport function useModalContext() {\n  const ctx = useContext(ModalContext);\n  if (!ctx) {\n    throw new Error('useModalContext must be used within ModalProvider');\n  }\n  return ctx;\n}\n"
+/**
+ * ModalContext — Gerencia estado global dos modais (signup, login, onboarding, contato)
+ * Permite que qualquer componente dentro do Router abra/feche modais sem prop drilling.
+ */
+
+import { createContext, useContext, useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
+
+interface ModalContextValue {
+  isSignupOpen: boolean;
+  isLoginOpen: boolean;
+  isOnboardingOpen: boolean;
+  isContactFounderOpen: boolean;
+  openSignup: () => void;
+  openLogin: () => void;
+  closeSignup: () => void;
+  closeLogin: () => void;
+  openOnboarding: () => void;
+  closeOnboarding: () => void;
+  openContactFounder: () => void;
+  closeContactFounder: () => void;
+  /** Signup concluido: fecha signup, abre onboarding */
+  handleSignupSuccess: () => void;
+  /** Login concluido: fecha login */
+  handleLoginSuccess: () => void;
+}
+
+const ModalContext = createContext<ModalContextValue | null>(null);
+
+export function ModalProvider({ children }: { children: ReactNode }) {
+  const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isContactFounderOpen, setIsContactFounderOpen] = useState(false);
+
+  const openSignup = useCallback(() => {
+    setIsLoginOpen(false);
+    setIsSignupOpen(true);
+  }, []);
+
+  const openLogin = useCallback(() => {
+    setIsSignupOpen(false);
+    setIsLoginOpen(true);
+  }, []);
+
+  const closeSignup = useCallback(() => setIsSignupOpen(false), []);
+  const closeLogin = useCallback(() => setIsLoginOpen(false), []);
+  const openOnboarding = useCallback(() => setIsOnboardingOpen(true), []);
+  const closeOnboarding = useCallback(() => setIsOnboardingOpen(false), []);
+  const openContactFounder = useCallback(() => setIsContactFounderOpen(true), []);
+  const closeContactFounder = useCallback(() => setIsContactFounderOpen(false), []);
+
+  const handleSignupSuccess = useCallback(() => {
+    setIsSignupOpen(false);
+    setIsOnboardingOpen(true);
+  }, []);
+
+  const handleLoginSuccess = useCallback(() => {
+    setIsLoginOpen(false);
+    // ProfileProvider detecta SIGNED_IN e recarrega automaticamente
+  }, []);
+
+  return (
+    <ModalContext.Provider
+      value={{
+        isSignupOpen,
+        isLoginOpen,
+        isOnboardingOpen,
+        isContactFounderOpen,
+        openSignup,
+        openLogin,
+        closeSignup,
+        closeLogin,
+        openOnboarding,
+        closeOnboarding,
+        openContactFounder,
+        closeContactFounder,
+        handleSignupSuccess,
+        handleLoginSuccess,
+      }}
+    >
+      {children}
+    </ModalContext.Provider>
+  );
+}
+
+export function useModalContext() {
+  const ctx = useContext(ModalContext);
+  if (!ctx) {
+    throw new Error('useModalContext must be used within ModalProvider');
+  }
+  return ctx;
 }

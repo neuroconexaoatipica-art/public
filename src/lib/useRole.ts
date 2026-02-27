@@ -1,7 +1,64 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useRole.ts",
-  "created_at": "2026-02-27T05:36:08.417Z",
-  "file_content": "import { useProfileContext } from './ProfileContext';\nimport {\n  normalizeRole,\n  hasAppAccess,\n  hasLeadershipAccess,\n  hasModAccess,\n  isSuperAdmin,\n  isWaitingApproval,\n  isBanned,\n  needsLeadershipOnboarding,\n  getRolePower,\n} from './roleEngine';\nimport type { UserRole } from './supabase';\n\n/**\n * useRole — Hook centralizado de permissões\n * \n * Usa ProfileContext para obter o usuário logado e expõe:\n * - role normalizado\n * - todas as verificações de permissão\n * - helpers de conveniência\n * \n * Uso: const { role, canAccessApp, isAdmin, isWaiting } = useRole();\n */\nexport function useRole() {\n  const { user, isLoading } = useProfileContext();\n\n  const role: UserRole = normalizeRole(user?.role);\n\n  return {\n    /** Role normalizado do usuário atual */\n    role,\n    /** Objeto user completo (pode ser null se não logado) */\n    user,\n    /** Ainda carregando perfil? */\n    isLoading,\n\n    // ═══ Permissões ═══\n    /** Pode acessar o app (Social Hub, Feed, Comunidades)? */\n    canAccessApp: hasAppAccess(role),\n    /** É super_admin (Mila)? */\n    isAdmin: isSuperAdmin(role),\n    /** Pode moderar (founder_paid, moderator, super_admin)? */\n    canModerate: hasModAccess(role),\n    /** Pode liderar (com onboarding feito)? */\n    canLead: hasLeadershipAccess(role, user?.leadership_onboarding_done),\n    /** Precisa completar onboarding de liderança? */\n    needsLeaderOnboarding: needsLeadershipOnboarding(role, user?.leadership_onboarding_done),\n\n    // ═══ Estados especiais ═══\n    /** Cadastrado mas aguardando aprovação? */\n    isWaiting: isWaitingApproval(role),\n    /** Banido? */\n    isBanned: isBanned(role),\n    /** Visitante não logado? */\n    isVisitor: role === 'visitor',\n    /** Está logado (qualquer role exceto visitor)? */\n    isLoggedIn: role !== 'visitor',\n\n    // ═══ Helpers ═══\n    /** Poder numérico do role (para comparações hierárquicas) */\n    power: getRolePower(role),\n  };\n}\n"
+import { useProfileContext } from './ProfileContext';
+import {
+  normalizeRole,
+  hasAppAccess,
+  hasLeadershipAccess,
+  hasModAccess,
+  isSuperAdmin,
+  isWaitingApproval,
+  isBanned,
+  needsLeadershipOnboarding,
+  getRolePower,
+} from './roleEngine';
+import type { UserRole } from './supabase';
+
+/**
+ * useRole — Hook centralizado de permissões
+ * 
+ * Usa ProfileContext para obter o usuário logado e expõe:
+ * - role normalizado
+ * - todas as verificações de permissão
+ * - helpers de conveniência
+ * 
+ * Uso: const { role, canAccessApp, isAdmin, isWaiting } = useRole();
+ */
+export function useRole() {
+  const { user, isLoading } = useProfileContext();
+
+  const role: UserRole = normalizeRole(user?.role);
+
+  return {
+    /** Role normalizado do usuário atual */
+    role,
+    /** Objeto user completo (pode ser null se não logado) */
+    user,
+    /** Ainda carregando perfil? */
+    isLoading,
+
+    // ═══ Permissões ═══
+    /** Pode acessar o app (Social Hub, Feed, Comunidades)? */
+    canAccessApp: hasAppAccess(role),
+    /** É super_admin (Mila)? */
+    isAdmin: isSuperAdmin(role),
+    /** Pode moderar (founder_paid, moderator, super_admin)? */
+    canModerate: hasModAccess(role),
+    /** Pode liderar (com onboarding feito)? */
+    canLead: hasLeadershipAccess(role, user?.leadership_onboarding_done),
+    /** Precisa completar onboarding de liderança? */
+    needsLeaderOnboarding: needsLeadershipOnboarding(role, user?.leadership_onboarding_done),
+
+    // ═══ Estados especiais ═══
+    /** Cadastrado mas aguardando aprovação? */
+    isWaiting: isWaitingApproval(role),
+    /** Banido? */
+    isBanned: isBanned(role),
+    /** Visitante não logado? */
+    isVisitor: role === 'visitor',
+    /** Está logado (qualquer role exceto visitor)? */
+    isLoggedIn: role !== 'visitor',
+
+    // ═══ Helpers ═══
+    /** Poder numérico do role (para comparações hierárquicas) */
+    power: getRolePower(role),
+  };
 }

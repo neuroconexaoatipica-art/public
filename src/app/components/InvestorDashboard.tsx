@@ -1,7 +1,537 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/InvestorDashboard.tsx",
-  "created_at": "2026-02-27T05:36:28.148Z",
-  "file_content": "/**\n * InvestorDashboard — Camada 9: Dashboard Investidor\n * Metricas de SaaS serio: MRR, retencao, participacao, nucleos, lives.\n * Acesso restrito a super_admin.\n */\n\nimport { useState, useEffect, useCallback } from \"react\";\nimport {\n  TrendingUp, Users, Activity, DollarSign, Calendar,\n  MapPin, Radio, BarChart3, RefreshCw, ArrowUpRight,\n  ArrowDownRight, Minus, Loader2, Eye\n} from \"lucide-react\";\nimport {\n  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,\n  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend\n} from \"recharts\";\nimport { supabase } from \"../../lib\";\n\n// ═══ TYPES ═══\n\ninterface InvestorMetrics {\n  membrosAtivos: number;\n  membrosTotais: number;\n  participacaoRitual: number; // %\n  taxaRetencao30d: number; // %\n  mrrAtual: number; // R$\n  projecaoMrr12m: number; // R$\n  livesNoMes: number;\n  nucleosAtivos: number;\n  encontrosRealizados: number;\n  // Extras para grafico\n  growthRate: number; // %\n  avgSessionsPerWeek: number;\n  connectionsTotal: number;\n  postsThisMonth: number;\n}\n\ninterface MonthlyData {\n  month: string;\n  membros: number;\n  mrr: number;\n  lives: number;\n}\n\n// ═══ COMPONENT ═══\n\nexport function InvestorDashboard() {\n  const [metrics, setMetrics] = useState<InvestorMetrics | null>(null);\n  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);\n  const [isLoading, setIsLoading] = useState(true);\n  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);\n\n  const loadMetrics = useCallback(async () => {\n    setIsLoading(true);\n    try {\n      const now = new Date();\n      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();\n      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();\n\n      // ── Queries paralelas ──\n      const [\n        usersTotal,\n        usersActive,\n        usersNew30d,\n        usersOlder30d,\n        ritualLogsMonth,\n        livesMonth,\n        nucleiActive,\n        eventsPresencial,\n        connectionsAll,\n        postsMonth,\n      ] = await Promise.all([\n        // Total de membros (excluindo visitors)\n        supabase.from(\"users\").select(\"*\", { count: \"exact\", head: true })\n          .not(\"role\", \"eq\", \"visitor\")\n          .not(\"role\", \"eq\", \"registered_unfinished\"),\n        // Membros ativos (last_active_at nos ultimos 30 dias)\n        supabase.from(\"users\").select(\"*\", { count: \"exact\", head: true })\n          .not(\"role\", \"eq\", \"visitor\")\n          .not(\"role\", \"eq\", \"registered_unfinished\")\n          .gte(\"last_active_at\", thirtyDaysAgo),\n        // Novos membros nos ultimos 30 dias\n        supabase.from(\"users\").select(\"*\", { count: \"exact\", head: true })\n          .not(\"role\", \"eq\", \"visitor\")\n          .gte(\"created_at\", thirtyDaysAgo),\n        // Membros que existiam ha 30+ dias\n        supabase.from(\"users\").select(\"*\", { count: \"exact\", head: true })\n          .not(\"role\", \"eq\", \"visitor\")\n          .not(\"role\", \"eq\", \"registered_unfinished\")\n          .lt(\"created_at\", thirtyDaysAgo),\n        // Ritual logs este mes\n        supabase.from(\"ritual_logs\").select(\"user_id\", { count: \"exact\" })\n          .gte(\"completed_at\", startOfMonth),\n        // Lives este mes\n        supabase.from(\"lives\").select(\"*\", { count: \"exact\", head: true })\n          .gte(\"scheduled_at\", startOfMonth),\n        // Nucleos ativos\n        supabase.from(\"nuclei\").select(\"*\", { count: \"exact\", head: true })\n          .eq(\"status\", \"active\"),\n        // Encontros presenciais realizados\n        supabase.from(\"events\").select(\"*\", { count: \"exact\", head: true })\n          .in(\"event_type\", [\"presencial\", \"hibrido\"])\n          .in(\"status\", [\"completed\", \"published\"]),\n        // Conexoes totais\n        supabase.from(\"connections\").select(\"*\", { count: \"exact\", head: true })\n          .eq(\"status\", \"accepted\"),\n        // Posts este mes\n        supabase.from(\"posts\").select(\"*\", { count: \"exact\", head: true })\n          .gte(\"created_at\", startOfMonth),\n      ]);\n\n      const totalMembros = usersTotal.count || 0;\n      const ativosCount = usersActive.count || 0;\n      const novos30d = usersNew30d.count || 0;\n      const antigos30d = usersOlder30d.count || 0;\n\n      // Participacao ritual: usuarios unicos que fizeram ritual / total ativos\n      const ritualUsersSet = new Set<string>();\n      if (ritualLogsMonth.data) {\n        ritualLogsMonth.data.forEach((log: any) => ritualUsersSet.add(log.user_id));\n      }\n      const ritualParticipacao = ativosCount > 0\n        ? Math.round((ritualUsersSet.size / ativosCount) * 100)\n        : 0;\n\n      // Taxa retencao 30 dias: membros ativos que existiam ha 30+ dias / total antigos\n      // Precisamos de uma query especifica\n      const { count: retidosCount } = await supabase\n        .from(\"users\")\n        .select(\"*\", { count: \"exact\", head: true })\n        .not(\"role\", \"eq\", \"visitor\")\n        .not(\"role\", \"eq\", \"registered_unfinished\")\n        .lt(\"created_at\", thirtyDaysAgo)\n        .gte(\"last_active_at\", thirtyDaysAgo);\n\n      const retencao = antigos30d > 0\n        ? Math.round(((retidosCount || 0) / antigos30d) * 100)\n        : 100; // Se nao tem antigos, retencao 100%\n\n      // MRR: Modelo freemium. Calculo baseado em membros pagos\n      // Para o beta, usamos estimativa por membro ativo\n      const TICKET_MEDIO = 29.90; // R$ por membro (projecao)\n      const membrosPagantes = totalMembros; // No beta, todos sao \"valiosos\"\n      const mrrAtual = Math.round(membrosPagantes * TICKET_MEDIO * 100) / 100;\n\n      // Projecao 12 meses: crescimento composto mensal baseado na taxa atual\n      const growthRate = totalMembros > 5 ? Math.round((novos30d / Math.max(totalMembros - novos30d, 1)) * 100) : 30;\n      const monthlyGrowth = 1 + (growthRate / 100);\n      let projected = mrrAtual;\n      for (let i = 0; i < 12; i++) {\n        projected *= monthlyGrowth;\n      }\n      const projecao12m = Math.round(projected * 100) / 100;\n\n      setMetrics({\n        membrosAtivos: ativosCount,\n        membrosTotais: totalMembros,\n        participacaoRitual: ritualParticipacao,\n        taxaRetencao30d: retencao,\n        mrrAtual,\n        projecaoMrr12m: projecao12m,\n        livesNoMes: livesMonth.count || 0,\n        nucleosAtivos: nucleiActive.count || 0,\n        encontrosRealizados: eventsPresencial.count || 0,\n        growthRate,\n        avgSessionsPerWeek: Math.round((ativosCount / Math.max(totalMembros, 1)) * 7 * 10) / 10,\n        connectionsTotal: connectionsAll.count || 0,\n        postsThisMonth: postsMonth.count || 0,\n      });\n\n      // ── Dados mensais para grafico (ultimos 6 meses) — queries paralelas ──\n      const meses = [\"Jan\", \"Fev\", \"Mar\", \"Abr\", \"Mai\", \"Jun\", \"Jul\", \"Ago\", \"Set\", \"Out\", \"Nov\", \"Dez\"];\n      const monthPromises = Array.from({ length: 6 }, (_, idx) => {\n        const i = 5 - idx;\n        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);\n        const nextD = new Date(d.getFullYear(), d.getMonth() + 1, 1);\n\n        return Promise.all([\n          supabase.from(\"users\").select(\"*\", { count: \"exact\", head: true })\n            .not(\"role\", \"eq\", \"visitor\")\n            .not(\"role\", \"eq\", \"registered_unfinished\")\n            .lt(\"created_at\", nextD.toISOString()),\n          supabase.from(\"lives\").select(\"*\", { count: \"exact\", head: true })\n            .gte(\"scheduled_at\", d.toISOString())\n            .lt(\"scheduled_at\", nextD.toISOString()),\n        ]).then(([membrosRes, livesRes]) => ({\n          month: `${meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,\n          membros: membrosRes.count || 0,\n          mrr: Math.round((membrosRes.count || 0) * TICKET_MEDIO),\n          lives: livesRes.count || 0,\n        }));\n      });\n\n      const monthly = await Promise.all(monthPromises);\n      setMonthlyData(monthly);\n\n      setLastUpdated(new Date());\n    } catch (err) {\n      console.error(\"[InvestorDashboard] Erro ao carregar metricas:\", err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    loadMetrics();\n  }, [loadMetrics]);\n\n  if (isLoading || !metrics) {\n    return (\n      <div className=\"flex flex-col items-center justify-center py-20\">\n        <Loader2 className=\"w-8 h-8 text-[#81D8D0] animate-spin mb-4\" />\n        <p className=\"text-white/40 text-sm\">Calculando metricas...</p>\n      </div>\n    );\n  }\n\n  // Dados para pie chart de composicao\n  const pieData = [\n    { name: \"Ativos 30d\", value: metrics.membrosAtivos, color: \"#81D8D0\" },\n    { name: \"Inativos\", value: Math.max(0, metrics.membrosTotais - metrics.membrosAtivos), color: \"#ffffff15\" },\n  ];\n\n  return (\n    <div className=\"space-y-6\">\n      {/* ═══ HEADER ═══ */}\n      <div className=\"flex items-center justify-between\">\n        <div>\n          <h2 className=\"text-white font-bold text-lg flex items-center gap-2\">\n            <TrendingUp className=\"w-5 h-5 text-[#81D8D0]\" />\n            Dashboard Investidor\n          </h2>\n          <p className=\"text-white/30 text-xs mt-1\">\n            Metricas de SaaS — NeuroConexao Atipica\n          </p>\n        </div>\n        <div className=\"flex items-center gap-3\">\n          {lastUpdated && (\n            <span className=\"text-[10px] text-white/20\">\n              Atualizado: {lastUpdated.toLocaleTimeString(\"pt-BR\", { hour: \"2-digit\", minute: \"2-digit\" })}\n            </span>\n          )}\n          <button\n            onClick={loadMetrics}\n            disabled={isLoading}\n            className=\"flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white/60 transition-colors disabled:opacity-40\"\n          >\n            <RefreshCw className={`w-3 h-3 ${isLoading ? \"animate-spin\" : \"\"}`} />\n            Atualizar\n          </button>\n        </div>\n      </div>\n\n      {/* ═══ KPIs PRINCIPAIS — Grid 4 colunas ═══ */}\n      <div className=\"grid grid-cols-2 md:grid-cols-4 gap-3\">\n        <MetricCard\n          label=\"Membros Ativos\"\n          value={metrics.membrosAtivos}\n          subtitle={`de ${metrics.membrosTotais} total`}\n          icon={Users}\n          color=\"#81D8D0\"\n        />\n        <MetricCard\n          label=\"Participacao Ritual\"\n          value={`${metrics.participacaoRitual}%`}\n          subtitle=\"do total ativo\"\n          icon={Activity}\n          color=\"#FF6B35\"\n          trend={metrics.participacaoRitual >= 50 ? \"up\" : metrics.participacaoRitual >= 30 ? \"neutral\" : \"down\"}\n        />\n        <MetricCard\n          label=\"Retencao 30d\"\n          value={`${metrics.taxaRetencao30d}%`}\n          subtitle=\"membros retidos\"\n          icon={Eye}\n          color={metrics.taxaRetencao30d >= 70 ? \"#81D8D0\" : metrics.taxaRetencao30d >= 50 ? \"#FF6B35\" : \"#C8102E\"}\n          trend={metrics.taxaRetencao30d >= 70 ? \"up\" : metrics.taxaRetencao30d >= 50 ? \"neutral\" : \"down\"}\n        />\n        <MetricCard\n          label=\"MRR Atual\"\n          value={formatCurrency(metrics.mrrAtual)}\n          subtitle={`Ticket: R$29,90`}\n          icon={DollarSign}\n          color=\"#81D8D0\"\n          highlight\n        />\n      </div>\n\n      {/* ═══ KPIs SECUNDARIOS — Grid 4 colunas ═══ */}\n      <div className=\"grid grid-cols-2 md:grid-cols-4 gap-3\">\n        <MetricCard\n          label=\"Projecao MRR 12m\"\n          value={formatCurrency(metrics.projecaoMrr12m)}\n          subtitle={`crescimento ${metrics.growthRate}%/mes`}\n          icon={TrendingUp}\n          color=\"#A855F7\"\n          highlight\n        />\n        <MetricCard\n          label=\"Lives/Mes\"\n          value={metrics.livesNoMes}\n          subtitle=\"este mes\"\n          icon={Radio}\n          color=\"#C8102E\"\n        />\n        <MetricCard\n          label=\"Nucleos Ativos\"\n          value={metrics.nucleosAtivos}\n          subtitle=\"territorios\"\n          icon={MapPin}\n          color=\"#FF6B35\"\n        />\n        <MetricCard\n          label=\"Encontros Realizados\"\n          value={metrics.encontrosRealizados}\n          subtitle=\"presenciais + hibridos\"\n          icon={Calendar}\n          color=\"#81D8D0\"\n        />\n      </div>\n\n      {/* ═══ GRAFICOS ═══ */}\n      <div className=\"grid grid-cols-1 lg:grid-cols-2 gap-4\">\n        {/* Crescimento de Membros */}\n        <div className=\"bg-white/5 border border-white/10 rounded-xl p-5\">\n          <h3 className=\"text-sm text-white font-bold mb-4 flex items-center gap-2\">\n            <Users className=\"w-4 h-4 text-[#81D8D0]\" />\n            Crescimento de Membros\n          </h3>\n          <div className=\"h-48\">\n            <ResponsiveContainer width=\"100%\" height=\"100%\">\n              <AreaChart data={monthlyData}>\n                <defs>\n                  <linearGradient id=\"gradMembros\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">\n                    <stop offset=\"5%\" stopColor=\"#81D8D0\" stopOpacity={0.3} />\n                    <stop offset=\"95%\" stopColor=\"#81D8D0\" stopOpacity={0} />\n                  </linearGradient>\n                </defs>\n                <CartesianGrid strokeDasharray=\"3 3\" stroke=\"rgba(255,255,255,0.05)\" />\n                <XAxis dataKey=\"month\" tick={{ fill: \"rgba(255,255,255,0.3)\", fontSize: 10 }} axisLine={false} />\n                <YAxis tick={{ fill: \"rgba(255,255,255,0.3)\", fontSize: 10 }} axisLine={false} />\n                <Tooltip\n                  contentStyle={{ backgroundColor: \"#1a1a1a\", border: \"1px solid rgba(255,255,255,0.1)\", borderRadius: 8, fontSize: 12 }}\n                  labelStyle={{ color: \"rgba(255,255,255,0.5)\" }}\n                />\n                <Area type=\"monotone\" dataKey=\"membros\" stroke=\"#81D8D0\" strokeWidth={2} fill=\"url(#gradMembros)\" />\n              </AreaChart>\n            </ResponsiveContainer>\n          </div>\n        </div>\n\n        {/* Projecao MRR */}\n        <div className=\"bg-white/5 border border-white/10 rounded-xl p-5\">\n          <h3 className=\"text-sm text-white font-bold mb-4 flex items-center gap-2\">\n            <DollarSign className=\"w-4 h-4 text-[#A855F7]\" />\n            MRR por Mes (R$)\n          </h3>\n          <div className=\"h-48\">\n            <ResponsiveContainer width=\"100%\" height=\"100%\">\n              <BarChart data={monthlyData}>\n                <CartesianGrid strokeDasharray=\"3 3\" stroke=\"rgba(255,255,255,0.05)\" />\n                <XAxis dataKey=\"month\" tick={{ fill: \"rgba(255,255,255,0.3)\", fontSize: 10 }} axisLine={false} />\n                <YAxis tick={{ fill: \"rgba(255,255,255,0.3)\", fontSize: 10 }} axisLine={false} />\n                <Tooltip\n                  contentStyle={{ backgroundColor: \"#1a1a1a\", border: \"1px solid rgba(255,255,255,0.1)\", borderRadius: 8, fontSize: 12 }}\n                  formatter={(value: number) => [`R$ ${value.toLocaleString(\"pt-BR\")}`, \"MRR\"]}\n                  labelStyle={{ color: \"rgba(255,255,255,0.5)\" }}\n                />\n                <Bar dataKey=\"mrr\" fill=\"#A855F7\" radius={[4, 4, 0, 0]} />\n              </BarChart>\n            </ResponsiveContainer>\n          </div>\n        </div>\n      </div>\n\n      {/* ═══ SEGUNDA LINHA: Pie + Engajamento ═══ */}\n      <div className=\"grid grid-cols-1 lg:grid-cols-2 gap-4\">\n        {/* Composicao de Membros */}\n        <div className=\"bg-white/5 border border-white/10 rounded-xl p-5\">\n          <h3 className=\"text-sm text-white font-bold mb-4 flex items-center gap-2\">\n            <BarChart3 className=\"w-4 h-4 text-[#81D8D0]\" />\n            Composicao de Membros\n          </h3>\n          <div className=\"h-48 flex items-center justify-center\">\n            <ResponsiveContainer width=\"100%\" height=\"100%\">\n              <PieChart>\n                <Pie\n                  data={pieData}\n                  cx=\"50%\"\n                  cy=\"50%\"\n                  innerRadius={50}\n                  outerRadius={70}\n                  paddingAngle={3}\n                  dataKey=\"value\"\n                >\n                  {pieData.map((entry, index) => (\n                    <Cell key={`cell-${index}`} fill={entry.color} stroke=\"transparent\" />\n                  ))}\n                </Pie>\n                <Legend\n                  verticalAlign=\"bottom\"\n                  height={30}\n                  formatter={(value: string) => <span style={{ color: \"rgba(255,255,255,0.5)\", fontSize: 11 }}>{value}</span>}\n                />\n                <Tooltip\n                  contentStyle={{ backgroundColor: \"#1a1a1a\", border: \"1px solid rgba(255,255,255,0.1)\", borderRadius: 8, fontSize: 12 }}\n                />\n              </PieChart>\n            </ResponsiveContainer>\n          </div>\n        </div>\n\n        {/* Metricas de Engajamento */}\n        <div className=\"bg-white/5 border border-white/10 rounded-xl p-5\">\n          <h3 className=\"text-sm text-white font-bold mb-4 flex items-center gap-2\">\n            <Activity className=\"w-4 h-4 text-[#FF6B35]\" />\n            Indicadores de Engajamento\n          </h3>\n          <div className=\"space-y-4\">\n            <EngagementRow\n              label=\"Conexoes Mentais\"\n              value={metrics.connectionsTotal}\n              maxValue={Math.max(metrics.membrosTotais * 3, metrics.connectionsTotal)}\n              color=\"#81D8D0\"\n            />\n            <EngagementRow\n              label=\"Posts este mes\"\n              value={metrics.postsThisMonth}\n              maxValue={Math.max(100, metrics.postsThisMonth)}\n              color=\"#FF6B35\"\n            />\n            <EngagementRow\n              label=\"Lives programadas\"\n              value={metrics.livesNoMes}\n              maxValue={Math.max(10, metrics.livesNoMes)}\n              color=\"#C8102E\"\n            />\n            <EngagementRow\n              label=\"Encontros presenciais\"\n              value={metrics.encontrosRealizados}\n              maxValue={Math.max(20, metrics.encontrosRealizados)}\n              color=\"#A855F7\"\n            />\n          </div>\n        </div>\n      </div>\n\n      {/* ═══ FOOTER — Nota sobre metricas ═══ */}\n      <div className=\"bg-white/3 border border-white/5 rounded-xl p-4\">\n        <p className=\"text-[10px] text-white/20 text-center leading-relaxed\">\n          Metricas calculadas em tempo real a partir do banco de dados.\n          MRR projetado com ticket medio de R$29,90/membro e taxa de crescimento mensal composta.\n          Retencao medida pela atividade nos ultimos 30 dias sobre membros com 30+ dias de conta.\n        </p>\n      </div>\n    </div>\n  );\n}\n\n// ═══ SUB-COMPONENTS ═══\n\nfunction MetricCard({\n  label,\n  value,\n  subtitle,\n  icon: Icon,\n  color,\n  trend,\n  highlight,\n}: {\n  label: string;\n  value: string | number;\n  subtitle?: string;\n  icon: any;\n  color: string;\n  trend?: \"up\" | \"down\" | \"neutral\";\n  highlight?: boolean;\n}) {\n  const TrendIcon = trend === \"up\" ? ArrowUpRight : trend === \"down\" ? ArrowDownRight : Minus;\n  const trendColor = trend === \"up\" ? \"#81D8D0\" : trend === \"down\" ? \"#C8102E\" : \"#ffffff40\";\n\n  return (\n    <div\n      className={`relative overflow-hidden bg-white/5 border rounded-xl p-4 transition-all ${\n        highlight ? \"border-[#81D8D0]/30 bg-gradient-to-br from-[#81D8D0]/5 to-transparent\" : \"border-white/10\"\n      }`}\n    >\n      <div className=\"flex items-center justify-between mb-2\">\n        <Icon className=\"w-4 h-4\" style={{ color }} />\n        {trend && <TrendIcon className=\"w-3.5 h-3.5\" style={{ color: trendColor }} />}\n      </div>\n      <p className=\"text-xl font-bold text-white\" style={{ fontVariantNumeric: \"tabular-nums\" }}>\n        {value}\n      </p>\n      <p className=\"text-white/40 text-[11px] mt-1 font-medium\">{label}</p>\n      {subtitle && <p className=\"text-white/20 text-[10px] mt-0.5\">{subtitle}</p>}\n      {highlight && (\n        <div className=\"absolute top-0 right-0 w-16 h-16 bg-[#81D8D0]/5 rounded-full -translate-y-1/2 translate-x-1/2\" />\n      )}\n    </div>\n  );\n}\n\nfunction EngagementRow({\n  label,\n  value,\n  maxValue,\n  color,\n}: {\n  label: string;\n  value: number;\n  maxValue: number;\n  color: string;\n}) {\n  const pct = maxValue > 0 ? Math.min(100, (value / maxValue) * 100) : 0;\n\n  return (\n    <div>\n      <div className=\"flex items-center justify-between mb-1\">\n        <span className=\"text-xs text-white/50\">{label}</span>\n        <span className=\"text-xs font-bold\" style={{ color }}>{value}</span>\n      </div>\n      <div className=\"w-full h-1.5 bg-white/5 rounded-full overflow-hidden\">\n        <div\n          className=\"h-full rounded-full transition-all duration-700\"\n          style={{ width: `${pct}%`, backgroundColor: color }}\n        />\n      </div>\n    </div>\n  );\n}\n\nfunction formatCurrency(value: number): string {\n  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;\n  if (value >= 1000) return `R$ ${(value / 1000).toFixed(1)}K`;\n  return `R$ ${value.toLocaleString(\"pt-BR\", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n}"
+/**
+ * InvestorDashboard — Camada 9: Dashboard Investidor
+ * Metricas de SaaS serio: MRR, retencao, participacao, nucleos, lives.
+ * Acesso restrito a super_admin.
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  TrendingUp, Users, Activity, DollarSign, Calendar,
+  MapPin, Radio, BarChart3, RefreshCw, ArrowUpRight,
+  ArrowDownRight, Minus, Loader2, Eye
+} from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
+} from "recharts";
+import { supabase } from "../../lib";
+
+// ═══ TYPES ═══
+
+interface InvestorMetrics {
+  membrosAtivos: number;
+  membrosTotais: number;
+  participacaoRitual: number; // %
+  taxaRetencao30d: number; // %
+  mrrAtual: number; // R$
+  projecaoMrr12m: number; // R$
+  livesNoMes: number;
+  nucleosAtivos: number;
+  encontrosRealizados: number;
+  // Extras para grafico
+  growthRate: number; // %
+  avgSessionsPerWeek: number;
+  connectionsTotal: number;
+  postsThisMonth: number;
+}
+
+interface MonthlyData {
+  month: string;
+  membros: number;
+  mrr: number;
+  lives: number;
+}
+
+// ═══ COMPONENT ═══
+
+export function InvestorDashboard() {
+  const [metrics, setMetrics] = useState<InvestorMetrics | null>(null);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const loadMetrics = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      // ── Queries paralelas ──
+      const [
+        usersTotal,
+        usersActive,
+        usersNew30d,
+        usersOlder30d,
+        ritualLogsMonth,
+        livesMonth,
+        nucleiActive,
+        eventsPresencial,
+        connectionsAll,
+        postsMonth,
+      ] = await Promise.all([
+        // Total de membros (excluindo visitors)
+        supabase.from("users").select("*", { count: "exact", head: true })
+          .not("role", "eq", "visitor")
+          .not("role", "eq", "registered_unfinished"),
+        // Membros ativos (last_active_at nos ultimos 30 dias)
+        supabase.from("users").select("*", { count: "exact", head: true })
+          .not("role", "eq", "visitor")
+          .not("role", "eq", "registered_unfinished")
+          .gte("last_active_at", thirtyDaysAgo),
+        // Novos membros nos ultimos 30 dias
+        supabase.from("users").select("*", { count: "exact", head: true })
+          .not("role", "eq", "visitor")
+          .gte("created_at", thirtyDaysAgo),
+        // Membros que existiam ha 30+ dias
+        supabase.from("users").select("*", { count: "exact", head: true })
+          .not("role", "eq", "visitor")
+          .not("role", "eq", "registered_unfinished")
+          .lt("created_at", thirtyDaysAgo),
+        // Ritual logs este mes
+        supabase.from("ritual_logs").select("user_id", { count: "exact" })
+          .gte("completed_at", startOfMonth),
+        // Lives este mes
+        supabase.from("lives").select("*", { count: "exact", head: true })
+          .gte("scheduled_at", startOfMonth),
+        // Nucleos ativos
+        supabase.from("nuclei").select("*", { count: "exact", head: true })
+          .eq("status", "active"),
+        // Encontros presenciais realizados
+        supabase.from("events").select("*", { count: "exact", head: true })
+          .in("event_type", ["presencial", "hibrido"])
+          .in("status", ["completed", "published"]),
+        // Conexoes totais
+        supabase.from("connections").select("*", { count: "exact", head: true })
+          .eq("status", "accepted"),
+        // Posts este mes
+        supabase.from("posts").select("*", { count: "exact", head: true })
+          .gte("created_at", startOfMonth),
+      ]);
+
+      const totalMembros = usersTotal.count || 0;
+      const ativosCount = usersActive.count || 0;
+      const novos30d = usersNew30d.count || 0;
+      const antigos30d = usersOlder30d.count || 0;
+
+      // Participacao ritual: usuarios unicos que fizeram ritual / total ativos
+      const ritualUsersSet = new Set<string>();
+      if (ritualLogsMonth.data) {
+        ritualLogsMonth.data.forEach((log: any) => ritualUsersSet.add(log.user_id));
+      }
+      const ritualParticipacao = ativosCount > 0
+        ? Math.round((ritualUsersSet.size / ativosCount) * 100)
+        : 0;
+
+      // Taxa retencao 30 dias: membros ativos que existiam ha 30+ dias / total antigos
+      // Precisamos de uma query especifica
+      const { count: retidosCount } = await supabase
+        .from("users")
+        .select("*", { count: "exact", head: true })
+        .not("role", "eq", "visitor")
+        .not("role", "eq", "registered_unfinished")
+        .lt("created_at", thirtyDaysAgo)
+        .gte("last_active_at", thirtyDaysAgo);
+
+      const retencao = antigos30d > 0
+        ? Math.round(((retidosCount || 0) / antigos30d) * 100)
+        : 100; // Se nao tem antigos, retencao 100%
+
+      // MRR: Modelo freemium. Calculo baseado em membros pagos
+      // Para o beta, usamos estimativa por membro ativo
+      const TICKET_MEDIO = 29.90; // R$ por membro (projecao)
+      const membrosPagantes = totalMembros; // No beta, todos sao "valiosos"
+      const mrrAtual = Math.round(membrosPagantes * TICKET_MEDIO * 100) / 100;
+
+      // Projecao 12 meses: crescimento composto mensal baseado na taxa atual
+      const growthRate = totalMembros > 5 ? Math.round((novos30d / Math.max(totalMembros - novos30d, 1)) * 100) : 30;
+      const monthlyGrowth = 1 + (growthRate / 100);
+      let projected = mrrAtual;
+      for (let i = 0; i < 12; i++) {
+        projected *= monthlyGrowth;
+      }
+      const projecao12m = Math.round(projected * 100) / 100;
+
+      setMetrics({
+        membrosAtivos: ativosCount,
+        membrosTotais: totalMembros,
+        participacaoRitual: ritualParticipacao,
+        taxaRetencao30d: retencao,
+        mrrAtual,
+        projecaoMrr12m: projecao12m,
+        livesNoMes: livesMonth.count || 0,
+        nucleosAtivos: nucleiActive.count || 0,
+        encontrosRealizados: eventsPresencial.count || 0,
+        growthRate,
+        avgSessionsPerWeek: Math.round((ativosCount / Math.max(totalMembros, 1)) * 7 * 10) / 10,
+        connectionsTotal: connectionsAll.count || 0,
+        postsThisMonth: postsMonth.count || 0,
+      });
+
+      // ── Dados mensais para grafico (ultimos 6 meses) — queries paralelas ──
+      const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+      const monthPromises = Array.from({ length: 6 }, (_, idx) => {
+        const i = 5 - idx;
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const nextD = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+
+        return Promise.all([
+          supabase.from("users").select("*", { count: "exact", head: true })
+            .not("role", "eq", "visitor")
+            .not("role", "eq", "registered_unfinished")
+            .lt("created_at", nextD.toISOString()),
+          supabase.from("lives").select("*", { count: "exact", head: true })
+            .gte("scheduled_at", d.toISOString())
+            .lt("scheduled_at", nextD.toISOString()),
+        ]).then(([membrosRes, livesRes]) => ({
+          month: `${meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+          membros: membrosRes.count || 0,
+          mrr: Math.round((membrosRes.count || 0) * TICKET_MEDIO),
+          lives: livesRes.count || 0,
+        }));
+      });
+
+      const monthly = await Promise.all(monthPromises);
+      setMonthlyData(monthly);
+
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error("[InvestorDashboard] Erro ao carregar metricas:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
+
+  if (isLoading || !metrics) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-[#81D8D0] animate-spin mb-4" />
+        <p className="text-white/40 text-sm">Calculando metricas...</p>
+      </div>
+    );
+  }
+
+  // Dados para pie chart de composicao
+  const pieData = [
+    { name: "Ativos 30d", value: metrics.membrosAtivos, color: "#81D8D0" },
+    { name: "Inativos", value: Math.max(0, metrics.membrosTotais - metrics.membrosAtivos), color: "#ffffff15" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* ═══ HEADER ═══ */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-white font-bold text-lg flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-[#81D8D0]" />
+            Dashboard Investidor
+          </h2>
+          <p className="text-white/30 text-xs mt-1">
+            Metricas de SaaS — NeuroConexao Atipica
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="text-[10px] text-white/20">
+              Atualizado: {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          <button
+            onClick={loadMetrics}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white/60 transition-colors disabled:opacity-40"
+          >
+            <RefreshCw className={`w-3 h-3 ${isLoading ? "animate-spin" : ""}`} />
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      {/* ═══ KPIs PRINCIPAIS — Grid 4 colunas ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard
+          label="Membros Ativos"
+          value={metrics.membrosAtivos}
+          subtitle={`de ${metrics.membrosTotais} total`}
+          icon={Users}
+          color="#81D8D0"
+        />
+        <MetricCard
+          label="Participacao Ritual"
+          value={`${metrics.participacaoRitual}%`}
+          subtitle="do total ativo"
+          icon={Activity}
+          color="#FF6B35"
+          trend={metrics.participacaoRitual >= 50 ? "up" : metrics.participacaoRitual >= 30 ? "neutral" : "down"}
+        />
+        <MetricCard
+          label="Retencao 30d"
+          value={`${metrics.taxaRetencao30d}%`}
+          subtitle="membros retidos"
+          icon={Eye}
+          color={metrics.taxaRetencao30d >= 70 ? "#81D8D0" : metrics.taxaRetencao30d >= 50 ? "#FF6B35" : "#C8102E"}
+          trend={metrics.taxaRetencao30d >= 70 ? "up" : metrics.taxaRetencao30d >= 50 ? "neutral" : "down"}
+        />
+        <MetricCard
+          label="MRR Atual"
+          value={formatCurrency(metrics.mrrAtual)}
+          subtitle={`Ticket: R$29,90`}
+          icon={DollarSign}
+          color="#81D8D0"
+          highlight
+        />
+      </div>
+
+      {/* ═══ KPIs SECUNDARIOS — Grid 4 colunas ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard
+          label="Projecao MRR 12m"
+          value={formatCurrency(metrics.projecaoMrr12m)}
+          subtitle={`crescimento ${metrics.growthRate}%/mes`}
+          icon={TrendingUp}
+          color="#A855F7"
+          highlight
+        />
+        <MetricCard
+          label="Lives/Mes"
+          value={metrics.livesNoMes}
+          subtitle="este mes"
+          icon={Radio}
+          color="#C8102E"
+        />
+        <MetricCard
+          label="Nucleos Ativos"
+          value={metrics.nucleosAtivos}
+          subtitle="territorios"
+          icon={MapPin}
+          color="#FF6B35"
+        />
+        <MetricCard
+          label="Encontros Realizados"
+          value={metrics.encontrosRealizados}
+          subtitle="presenciais + hibridos"
+          icon={Calendar}
+          color="#81D8D0"
+        />
+      </div>
+
+      {/* ═══ GRAFICOS ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Crescimento de Membros */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+          <h3 className="text-sm text-white font-bold mb-4 flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#81D8D0]" />
+            Crescimento de Membros
+          </h3>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlyData}>
+                <defs>
+                  <linearGradient id="gradMembros" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#81D8D0" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#81D8D0" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="month" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }} axisLine={false} />
+                <YAxis tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: "rgba(255,255,255,0.5)" }}
+                />
+                <Area type="monotone" dataKey="membros" stroke="#81D8D0" strokeWidth={2} fill="url(#gradMembros)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Projecao MRR */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+          <h3 className="text-sm text-white font-bold mb-4 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-[#A855F7]" />
+            MRR por Mes (R$)
+          </h3>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="month" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }} axisLine={false} />
+                <YAxis tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }} axisLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }}
+                  formatter={(value: number) => [`R$ ${value.toLocaleString("pt-BR")}`, "MRR"]}
+                  labelStyle={{ color: "rgba(255,255,255,0.5)" }}
+                />
+                <Bar dataKey="mrr" fill="#A855F7" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ SEGUNDA LINHA: Pie + Engajamento ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Composicao de Membros */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+          <h3 className="text-sm text-white font-bold mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#81D8D0]" />
+            Composicao de Membros
+          </h3>
+          <div className="h-48 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={70}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
+                  ))}
+                </Pie>
+                <Legend
+                  verticalAlign="bottom"
+                  height={30}
+                  formatter={(value: string) => <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>{value}</span>}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Metricas de Engajamento */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+          <h3 className="text-sm text-white font-bold mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-[#FF6B35]" />
+            Indicadores de Engajamento
+          </h3>
+          <div className="space-y-4">
+            <EngagementRow
+              label="Conexoes Mentais"
+              value={metrics.connectionsTotal}
+              maxValue={Math.max(metrics.membrosTotais * 3, metrics.connectionsTotal)}
+              color="#81D8D0"
+            />
+            <EngagementRow
+              label="Posts este mes"
+              value={metrics.postsThisMonth}
+              maxValue={Math.max(100, metrics.postsThisMonth)}
+              color="#FF6B35"
+            />
+            <EngagementRow
+              label="Lives programadas"
+              value={metrics.livesNoMes}
+              maxValue={Math.max(10, metrics.livesNoMes)}
+              color="#C8102E"
+            />
+            <EngagementRow
+              label="Encontros presenciais"
+              value={metrics.encontrosRealizados}
+              maxValue={Math.max(20, metrics.encontrosRealizados)}
+              color="#A855F7"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ FOOTER — Nota sobre metricas ═══ */}
+      <div className="bg-white/3 border border-white/5 rounded-xl p-4">
+        <p className="text-[10px] text-white/20 text-center leading-relaxed">
+          Metricas calculadas em tempo real a partir do banco de dados.
+          MRR projetado com ticket medio de R$29,90/membro e taxa de crescimento mensal composta.
+          Retencao medida pela atividade nos ultimos 30 dias sobre membros com 30+ dias de conta.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ═══ SUB-COMPONENTS ═══
+
+function MetricCard({
+  label,
+  value,
+  subtitle,
+  icon: Icon,
+  color,
+  trend,
+  highlight,
+}: {
+  label: string;
+  value: string | number;
+  subtitle?: string;
+  icon: any;
+  color: string;
+  trend?: "up" | "down" | "neutral";
+  highlight?: boolean;
+}) {
+  const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : Minus;
+  const trendColor = trend === "up" ? "#81D8D0" : trend === "down" ? "#C8102E" : "#ffffff40";
+
+  return (
+    <div
+      className={`relative overflow-hidden bg-white/5 border rounded-xl p-4 transition-all ${
+        highlight ? "border-[#81D8D0]/30 bg-gradient-to-br from-[#81D8D0]/5 to-transparent" : "border-white/10"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <Icon className="w-4 h-4" style={{ color }} />
+        {trend && <TrendIcon className="w-3.5 h-3.5" style={{ color: trendColor }} />}
+      </div>
+      <p className="text-xl font-bold text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </p>
+      <p className="text-white/40 text-[11px] mt-1 font-medium">{label}</p>
+      {subtitle && <p className="text-white/20 text-[10px] mt-0.5">{subtitle}</p>}
+      {highlight && (
+        <div className="absolute top-0 right-0 w-16 h-16 bg-[#81D8D0]/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+      )}
+    </div>
+  );
+}
+
+function EngagementRow({
+  label,
+  value,
+  maxValue,
+  color,
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+  color: string;
+}) {
+  const pct = maxValue > 0 ? Math.min(100, (value / maxValue) * 100) : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-white/50">{label}</span>
+        <span className="text-xs font-bold" style={{ color }}>{value}</span>
+      </div>
+      <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function formatCurrency(value: number): string {
+  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `R$ ${(value / 1000).toFixed(1)}K`;
+  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }

@@ -1,7 +1,322 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/CreateEventModal.tsx",
-  "created_at": "2026-02-27T05:36:21.501Z",
-  "file_content": "import { useState } from \"react\";\nimport { motion } from \"motion/react\";\nimport { X, Calendar, Clock, MapPin, Video, Users, Flame, AlertCircle } from \"lucide-react\";\nimport { useCommunitiesContext } from \"../../lib\";\nimport type { EventType, RitualType, LocationType } from \"../../lib/supabase\";\nimport { EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS, RITUAL_TYPE_DESCRIPTIONS, LOCATION_TYPE_LABELS } from \"../../lib/useEvents\";\nimport type { CreateEventInput } from \"../../lib/useEvents\";\n\ninterface CreateEventModalProps {\n  isOpen: boolean;\n  onClose: () => void;\n  onSubmit: (input: CreateEventInput) => Promise<void>;\n  preselectedCommunityId?: string | null;\n}\n\nexport function CreateEventModal({ isOpen, onClose, onSubmit, preselectedCommunityId }: CreateEventModalProps) {\n  const { communities } = useCommunitiesContext();\n\n  const [title, setTitle] = useState('');\n  const [description, setDescription] = useState('');\n  const [eventType, setEventType] = useState<EventType>('encontro');\n  const [ritualType, setRitualType] = useState<RitualType>('roda_de_escuta');\n  const [communityId, setCommunityId] = useState<string>(preselectedCommunityId || '');\n  const [startsAt, setStartsAt] = useState('');\n  const [endsAt, setEndsAt] = useState('');\n  const [maxParticipants, setMaxParticipants] = useState('');\n  const [locationType, setLocationType] = useState<LocationType>('online');\n  const [locationUrl, setLocationUrl] = useState('');\n  const [locationAddress, setLocationAddress] = useState('');\n  const [isSubmitting, setIsSubmitting] = useState(false);\n  const [error, setError] = useState('');\n\n  // Filtrar comunidades reais (não pending/local)\n  const realCommunities = communities.filter(c => !c.id.startsWith('pending-') && !c.id.startsWith('local-'));\n\n  // Comunidades com ritual habilitado\n  const ritualCommunities = realCommunities.filter(c => c.ritual_enabled);\n\n  const handleSubmit = async (e: React.FormEvent) => {\n    e.preventDefault();\n    setError('');\n\n    if (!title.trim()) { setError('Titulo e obrigatorio'); return; }\n    if (!startsAt) { setError('Data/hora de inicio e obrigatoria'); return; }\n\n    // Validar que ritual só pode ser em comunidades com ritual_enabled\n    if (eventType === 'ritual' && communityId) {\n      const comm = communities.find(c => c.id === communityId);\n      if (comm && !comm.ritual_enabled) {\n        setError('Essa comunidade nao tem rituais habilitados');\n        return;\n      }\n    }\n\n    setIsSubmitting(true);\n    try {\n      await onSubmit({\n        title: title.trim(),\n        description: description.trim(),\n        event_type: eventType,\n        ritual_type: eventType === 'ritual' ? ritualType : null,\n        community_id: communityId || null,\n        starts_at: new Date(startsAt).toISOString(),\n        ends_at: endsAt ? new Date(endsAt).toISOString() : null,\n        max_participants: maxParticipants ? parseInt(maxParticipants) : null,\n        location_type: locationType,\n        location_url: locationUrl.trim(),\n        location_address: locationAddress.trim(),\n        status: 'published',\n      });\n      // Reset\n      setTitle('');\n      setDescription('');\n      setEventType('encontro');\n      setStartsAt('');\n      setEndsAt('');\n      setMaxParticipants('');\n      setLocationUrl('');\n      setLocationAddress('');\n      onClose();\n    } catch (err: unknown) {\n      setError(err instanceof Error ? err.message : 'Erro ao criar evento');\n    } finally {\n      setIsSubmitting(false);\n    }\n  };\n\n  if (!isOpen) return null;\n\n  return (\n    <div className=\"fixed inset-0 z-50 flex items-center justify-center p-4\">\n      <div className=\"absolute inset-0 bg-black/70 backdrop-blur-sm\" onClick={onClose} />\n      <motion.div\n        initial={{ opacity: 0, scale: 0.95, y: 20 }}\n        animate={{ opacity: 1, scale: 1, y: 0 }}\n        exit={{ opacity: 0, scale: 0.95, y: 20 }}\n        className=\"relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[#1A1A1A] border border-white/10 rounded-2xl\"\n      >\n        {/* Header */}\n        <div className=\"sticky top-0 bg-[#1A1A1A] border-b border-white/10 px-6 py-4 flex items-center justify-between z-10\">\n          <div className=\"flex items-center gap-3\">\n            <Calendar className=\"h-5 w-5 text-[#81D8D0]\" />\n            <h2 className=\"text-lg text-white\">Criar Evento</h2>\n          </div>\n          <button onClick={onClose} className=\"p-2 hover:bg-white/10 rounded-lg transition-colors\">\n            <X className=\"h-5 w-5 text-white/60\" />\n          </button>\n        </div>\n\n        <form onSubmit={handleSubmit} className=\"p-6 space-y-5\">\n          {/* Erro */}\n          {error && (\n            <div className=\"flex items-center gap-2 p-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl\">\n              <AlertCircle className=\"h-4 w-4 text-[#C8102E] flex-shrink-0\" />\n              <p className=\"text-sm text-[#C8102E]\">{error}</p>\n            </div>\n          )}\n\n          {/* Titulo */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">Titulo *</label>\n            <input\n              type=\"text\"\n              value={title}\n              onChange={(e) => setTitle(e.target.value)}\n              placeholder=\"Ex: Roda de Escuta — Intensidade que nao cabe\"\n              className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50\"\n              maxLength={120}\n            />\n          </div>\n\n          {/* Tipo do evento */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">Tipo do evento *</label>\n            <div className=\"grid grid-cols-4 gap-2\">\n              {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((type) => (\n                <button\n                  key={type}\n                  type=\"button\"\n                  onClick={() => setEventType(type)}\n                  className={`px-3 py-2 rounded-xl text-xs transition-all border ${\n                    eventType === type\n                      ? 'bg-[#81D8D0]/20 border-[#81D8D0]/50 text-[#81D8D0]'\n                      : 'bg-white/3 border-white/10 text-white/50 hover:bg-white/5'\n                  }`}\n                >\n                  {type === 'ritual' && <Flame className=\"inline h-3 w-3 mr-1\" />}\n                  {EVENT_TYPE_LABELS[type]}\n                </button>\n              ))}\n            </div>\n          </div>\n\n          {/* Tipo do ritual (condicional) */}\n          {eventType === 'ritual' && (\n            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>\n              <label className=\"block text-sm text-white/60 mb-1.5\">\n                <Flame className=\"inline h-4 w-4 text-[#6B21A8] mr-1\" />\n                Tipo do ritual *\n              </label>\n              <div className=\"space-y-2\">\n                {(Object.keys(RITUAL_TYPE_LABELS) as RitualType[]).map((rt) => (\n                  <button\n                    key={rt}\n                    type=\"button\"\n                    onClick={() => setRitualType(rt)}\n                    className={`w-full text-left p-3 rounded-xl border transition-all ${\n                      ritualType === rt\n                        ? 'bg-[#6B21A8]/20 border-[#6B21A8]/50'\n                        : 'bg-white/3 border-white/10 hover:bg-white/5'\n                    }`}\n                  >\n                    <p className={`text-sm ${ritualType === rt ? 'text-[#A855F7]' : 'text-white/70'}`}>\n                      {RITUAL_TYPE_LABELS[rt]}\n                    </p>\n                    <p className=\"text-xs text-white/30 mt-0.5\">{RITUAL_TYPE_DESCRIPTIONS[rt]}</p>\n                  </button>\n                ))}\n              </div>\n            </motion.div>\n          )}\n\n          {/* Comunidade */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">Comunidade (opcional)</label>\n            <select\n              value={communityId}\n              onChange={(e) => setCommunityId(e.target.value)}\n              className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 appearance-none\"\n            >\n              <option value=\"\" className=\"bg-[#1A1A1A]\">Evento geral (sem comunidade)</option>\n              {(eventType === 'ritual' ? ritualCommunities : realCommunities).map((c) => (\n                <option key={c.id} value={c.id} className=\"bg-[#1A1A1A]\">{c.name}</option>\n              ))}\n            </select>\n            {eventType === 'ritual' && ritualCommunities.length === 0 && (\n              <p className=\"text-xs text-[#FF6B35] mt-1\">Nenhuma comunidade com rituais habilitados</p>\n            )}\n          </div>\n\n          {/* Descricao */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">Descricao</label>\n            <textarea\n              value={description}\n              onChange={(e) => setDescription(e.target.value)}\n              placeholder=\"O que vai acontecer? Qual o contexto?\"\n              rows={3}\n              className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 resize-none\"\n              maxLength={2000}\n            />\n          </div>\n\n          {/* Data/Hora */}\n          <div className=\"grid grid-cols-2 gap-4\">\n            <div>\n              <label className=\"block text-sm text-white/60 mb-1.5\">\n                <Clock className=\"inline h-3.5 w-3.5 mr-1\" />\n                Inicio *\n              </label>\n              <input\n                type=\"datetime-local\"\n                value={startsAt}\n                onChange={(e) => setStartsAt(e.target.value)}\n                className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 [color-scheme:dark]\"\n              />\n            </div>\n            <div>\n              <label className=\"block text-sm text-white/60 mb-1.5\">\n                <Clock className=\"inline h-3.5 w-3.5 mr-1\" />\n                Fim (opcional)\n              </label>\n              <input\n                type=\"datetime-local\"\n                value={endsAt}\n                onChange={(e) => setEndsAt(e.target.value)}\n                className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 [color-scheme:dark]\"\n              />\n            </div>\n          </div>\n\n          {/* Local */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">Local</label>\n            <div className=\"grid grid-cols-3 gap-2 mb-3\">\n              {(Object.keys(LOCATION_TYPE_LABELS) as LocationType[]).map((lt) => (\n                <button\n                  key={lt}\n                  type=\"button\"\n                  onClick={() => setLocationType(lt)}\n                  className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all border ${\n                    locationType === lt\n                      ? 'bg-[#81D8D0]/20 border-[#81D8D0]/50 text-[#81D8D0]'\n                      : 'bg-white/3 border-white/10 text-white/50 hover:bg-white/5'\n                  }`}\n                >\n                  {lt === 'online' ? <Video className=\"h-3.5 w-3.5\" /> : <MapPin className=\"h-3.5 w-3.5\" />}\n                  {LOCATION_TYPE_LABELS[lt]}\n                </button>\n              ))}\n            </div>\n\n            {(locationType === 'online' || locationType === 'hibrido') && (\n              <input\n                type=\"url\"\n                value={locationUrl}\n                onChange={(e) => setLocationUrl(e.target.value)}\n                placeholder=\"Link da sala (Google Meet, Zoom, etc.)\"\n                className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 mb-2\"\n              />\n            )}\n\n            {(locationType === 'presencial' || locationType === 'hibrido') && (\n              <input\n                type=\"text\"\n                value={locationAddress}\n                onChange={(e) => setLocationAddress(e.target.value)}\n                placeholder=\"Endereco ou local\"\n                className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50\"\n              />\n            )}\n          </div>\n\n          {/* Max participantes */}\n          <div>\n            <label className=\"block text-sm text-white/60 mb-1.5\">\n              <Users className=\"inline h-3.5 w-3.5 mr-1\" />\n              Limite de participantes (opcional)\n            </label>\n            <input\n              type=\"number\"\n              value={maxParticipants}\n              onChange={(e) => setMaxParticipants(e.target.value)}\n              placeholder=\"Sem limite\"\n              min={1}\n              max={500}\n              className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50\"\n            />\n          </div>\n\n          {/* Botoes */}\n          <div className=\"flex gap-3 pt-2\">\n            <button\n              type=\"button\"\n              onClick={onClose}\n              className=\"flex-1 px-4 py-3 bg-white/5 text-white/60 rounded-xl hover:bg-white/10 transition-colors\"\n            >\n              Cancelar\n            </button>\n            <button\n              type=\"submit\"\n              disabled={isSubmitting}\n              className=\"flex-1 px-4 py-3 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors disabled:opacity-50\"\n            >\n              {isSubmitting ? 'Criando...' : 'Criar Evento'}\n            </button>\n          </div>\n        </form>\n      </motion.div>\n    </div>\n  );\n}\n"
+import { useState } from "react";
+import { motion } from "motion/react";
+import { X, Calendar, Clock, MapPin, Video, Users, Flame, AlertCircle } from "lucide-react";
+import { useCommunitiesContext } from "../../lib";
+import type { EventType, RitualType, LocationType } from "../../lib/supabase";
+import { EVENT_TYPE_LABELS, RITUAL_TYPE_LABELS, RITUAL_TYPE_DESCRIPTIONS, LOCATION_TYPE_LABELS } from "../../lib/useEvents";
+import type { CreateEventInput } from "../../lib/useEvents";
+
+interface CreateEventModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (input: CreateEventInput) => Promise<void>;
+  preselectedCommunityId?: string | null;
+}
+
+export function CreateEventModal({ isOpen, onClose, onSubmit, preselectedCommunityId }: CreateEventModalProps) {
+  const { communities } = useCommunitiesContext();
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [eventType, setEventType] = useState<EventType>('encontro');
+  const [ritualType, setRitualType] = useState<RitualType>('roda_de_escuta');
+  const [communityId, setCommunityId] = useState<string>(preselectedCommunityId || '');
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
+  const [maxParticipants, setMaxParticipants] = useState('');
+  const [locationType, setLocationType] = useState<LocationType>('online');
+  const [locationUrl, setLocationUrl] = useState('');
+  const [locationAddress, setLocationAddress] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  // Filtrar comunidades reais (não pending/local)
+  const realCommunities = communities.filter(c => !c.id.startsWith('pending-') && !c.id.startsWith('local-'));
+
+  // Comunidades com ritual habilitado
+  const ritualCommunities = realCommunities.filter(c => c.ritual_enabled);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!title.trim()) { setError('Titulo e obrigatorio'); return; }
+    if (!startsAt) { setError('Data/hora de inicio e obrigatoria'); return; }
+
+    // Validar que ritual só pode ser em comunidades com ritual_enabled
+    if (eventType === 'ritual' && communityId) {
+      const comm = communities.find(c => c.id === communityId);
+      if (comm && !comm.ritual_enabled) {
+        setError('Essa comunidade nao tem rituais habilitados');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: description.trim(),
+        event_type: eventType,
+        ritual_type: eventType === 'ritual' ? ritualType : null,
+        community_id: communityId || null,
+        starts_at: new Date(startsAt).toISOString(),
+        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+        max_participants: maxParticipants ? parseInt(maxParticipants) : null,
+        location_type: locationType,
+        location_url: locationUrl.trim(),
+        location_address: locationAddress.trim(),
+        status: 'published',
+      });
+      // Reset
+      setTitle('');
+      setDescription('');
+      setEventType('encontro');
+      setStartsAt('');
+      setEndsAt('');
+      setMaxParticipants('');
+      setLocationUrl('');
+      setLocationAddress('');
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar evento');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[#1A1A1A] border border-white/10 rounded-2xl"
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-[#1A1A1A] border-b border-white/10 px-6 py-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <Calendar className="h-5 w-5 text-[#81D8D0]" />
+            <h2 className="text-lg text-white">Criar Evento</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="h-5 w-5 text-white/60" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Erro */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl">
+              <AlertCircle className="h-4 w-4 text-[#C8102E] flex-shrink-0" />
+              <p className="text-sm text-[#C8102E]">{error}</p>
+            </div>
+          )}
+
+          {/* Titulo */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">Titulo *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Roda de Escuta — Intensidade que nao cabe"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50"
+              maxLength={120}
+            />
+          </div>
+
+          {/* Tipo do evento */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">Tipo do evento *</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setEventType(type)}
+                  className={`px-3 py-2 rounded-xl text-xs transition-all border ${
+                    eventType === type
+                      ? 'bg-[#81D8D0]/20 border-[#81D8D0]/50 text-[#81D8D0]'
+                      : 'bg-white/3 border-white/10 text-white/50 hover:bg-white/5'
+                  }`}
+                >
+                  {type === 'ritual' && <Flame className="inline h-3 w-3 mr-1" />}
+                  {EVENT_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tipo do ritual (condicional) */}
+          {eventType === 'ritual' && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+              <label className="block text-sm text-white/60 mb-1.5">
+                <Flame className="inline h-4 w-4 text-[#6B21A8] mr-1" />
+                Tipo do ritual *
+              </label>
+              <div className="space-y-2">
+                {(Object.keys(RITUAL_TYPE_LABELS) as RitualType[]).map((rt) => (
+                  <button
+                    key={rt}
+                    type="button"
+                    onClick={() => setRitualType(rt)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${
+                      ritualType === rt
+                        ? 'bg-[#6B21A8]/20 border-[#6B21A8]/50'
+                        : 'bg-white/3 border-white/10 hover:bg-white/5'
+                    }`}
+                  >
+                    <p className={`text-sm ${ritualType === rt ? 'text-[#A855F7]' : 'text-white/70'}`}>
+                      {RITUAL_TYPE_LABELS[rt]}
+                    </p>
+                    <p className="text-xs text-white/30 mt-0.5">{RITUAL_TYPE_DESCRIPTIONS[rt]}</p>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Comunidade */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">Comunidade (opcional)</label>
+            <select
+              value={communityId}
+              onChange={(e) => setCommunityId(e.target.value)}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 appearance-none"
+            >
+              <option value="" className="bg-[#1A1A1A]">Evento geral (sem comunidade)</option>
+              {(eventType === 'ritual' ? ritualCommunities : realCommunities).map((c) => (
+                <option key={c.id} value={c.id} className="bg-[#1A1A1A]">{c.name}</option>
+              ))}
+            </select>
+            {eventType === 'ritual' && ritualCommunities.length === 0 && (
+              <p className="text-xs text-[#FF6B35] mt-1">Nenhuma comunidade com rituais habilitados</p>
+            )}
+          </div>
+
+          {/* Descricao */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">Descricao</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="O que vai acontecer? Qual o contexto?"
+              rows={3}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 resize-none"
+              maxLength={2000}
+            />
+          </div>
+
+          {/* Data/Hora */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-white/60 mb-1.5">
+                <Clock className="inline h-3.5 w-3.5 mr-1" />
+                Inicio *
+              </label>
+              <input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-white/60 mb-1.5">
+                <Clock className="inline h-3.5 w-3.5 mr-1" />
+                Fim (opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#81D8D0]/50 [color-scheme:dark]"
+              />
+            </div>
+          </div>
+
+          {/* Local */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">Local</label>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {(Object.keys(LOCATION_TYPE_LABELS) as LocationType[]).map((lt) => (
+                <button
+                  key={lt}
+                  type="button"
+                  onClick={() => setLocationType(lt)}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all border ${
+                    locationType === lt
+                      ? 'bg-[#81D8D0]/20 border-[#81D8D0]/50 text-[#81D8D0]'
+                      : 'bg-white/3 border-white/10 text-white/50 hover:bg-white/5'
+                  }`}
+                >
+                  {lt === 'online' ? <Video className="h-3.5 w-3.5" /> : <MapPin className="h-3.5 w-3.5" />}
+                  {LOCATION_TYPE_LABELS[lt]}
+                </button>
+              ))}
+            </div>
+
+            {(locationType === 'online' || locationType === 'hibrido') && (
+              <input
+                type="url"
+                value={locationUrl}
+                onChange={(e) => setLocationUrl(e.target.value)}
+                placeholder="Link da sala (Google Meet, Zoom, etc.)"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 mb-2"
+              />
+            )}
+
+            {(locationType === 'presencial' || locationType === 'hibrido') && (
+              <input
+                type="text"
+                value={locationAddress}
+                onChange={(e) => setLocationAddress(e.target.value)}
+                placeholder="Endereco ou local"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50"
+              />
+            )}
+          </div>
+
+          {/* Max participantes */}
+          <div>
+            <label className="block text-sm text-white/60 mb-1.5">
+              <Users className="inline h-3.5 w-3.5 mr-1" />
+              Limite de participantes (opcional)
+            </label>
+            <input
+              type="number"
+              value={maxParticipants}
+              onChange={(e) => setMaxParticipants(e.target.value)}
+              placeholder="Sem limite"
+              min={1}
+              max={500}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50"
+            />
+          </div>
+
+          {/* Botoes */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-white/5 text-white/60 rounded-xl hover:bg-white/10 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-3 bg-[#81D8D0] text-black rounded-xl hover:bg-[#81D8D0]/90 transition-colors disabled:opacity-50"
+            >
+              {isSubmitting ? 'Criando...' : 'Criar Evento'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
 }

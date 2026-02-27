@@ -1,7 +1,60 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useReports.ts",
-  "created_at": "2026-02-27T05:36:07.934Z",
-  "file_content": "import { useState, useCallback } from 'react';\nimport { supabase } from './supabase';\n\nexport type ReportType = 'harassment' | 'hate_speech' | 'sexual_content' | 'child_safety' |\n  'spam' | 'impersonation' | 'self_harm' | 'violence' | 'inappropriate_content' | 'privacy_violation' | 'other';\n\nexport const REPORT_TYPE_LABELS: Record<ReportType, { label: string; severity: string; icon: string }> = {\n  child_safety:         { label: 'Protecao infantil / Pedofilia', severity: 'critical', icon: '🚨' },\n  harassment:           { label: 'Assedio / Perseguicao', severity: 'high', icon: '⚠️' },\n  hate_speech:          { label: 'Discurso de odio', severity: 'high', icon: '🚫' },\n  sexual_content:       { label: 'Conteudo sexual nao-consentido', severity: 'high', icon: '🔞' },\n  violence:             { label: 'Violencia / Ameaca', severity: 'high', icon: '💀' },\n  self_harm:            { label: 'Autolesao / Suicidio', severity: 'high', icon: '🆘' },\n  impersonation:        { label: 'Falsa identidade', severity: 'medium', icon: '🎭' },\n  spam:                 { label: 'Spam / Propaganda', severity: 'low', icon: '📢' },\n  inappropriate_content:{ label: 'Conteudo inadequado', severity: 'medium', icon: '👎' },\n  privacy_violation:    { label: 'Violacao de privacidade', severity: 'medium', icon: '🔒' },\n  other:                { label: 'Outro', severity: 'medium', icon: '📝' },\n};\n\nexport function useReports() {\n  const [isSubmitting, setIsSubmitting] = useState(false);\n\n  const submitReport = useCallback(async (params: {\n    reportedUserId?: string;\n    reportedContentId?: string;\n    reportedContentType?: string;\n    reportType: ReportType;\n    description?: string;\n  }) => {\n    setIsSubmitting(true);\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const severity = params.reportType === 'child_safety' ? 'critical'\n        : ['harassment', 'hate_speech', 'sexual_content', 'violence', 'self_harm'].includes(params.reportType) ? 'high'\n        : 'medium';\n\n      const { error } = await supabase.from('reports').insert({\n        reporter_id: user.id,\n        reported_user_id: params.reportedUserId || null,\n        reported_content_id: params.reportedContentId || null,\n        reported_content_type: params.reportedContentType || null,\n        report_type: params.reportType,\n        severity,\n        description: params.description || null,\n      });\n\n      if (error) throw error;\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message };\n    } finally {\n      setIsSubmitting(false);\n    }\n  }, []);\n\n  return { submitReport, isSubmitting };\n}\n"
+import { useState, useCallback } from 'react';
+import { supabase } from './supabase';
+
+export type ReportType = 'harassment' | 'hate_speech' | 'sexual_content' | 'child_safety' |
+  'spam' | 'impersonation' | 'self_harm' | 'violence' | 'inappropriate_content' | 'privacy_violation' | 'other';
+
+export const REPORT_TYPE_LABELS: Record<ReportType, { label: string; severity: string; icon: string }> = {
+  child_safety:         { label: 'Protecao infantil / Pedofilia', severity: 'critical', icon: '🚨' },
+  harassment:           { label: 'Assedio / Perseguicao', severity: 'high', icon: '⚠️' },
+  hate_speech:          { label: 'Discurso de odio', severity: 'high', icon: '🚫' },
+  sexual_content:       { label: 'Conteudo sexual nao-consentido', severity: 'high', icon: '🔞' },
+  violence:             { label: 'Violencia / Ameaca', severity: 'high', icon: '💀' },
+  self_harm:            { label: 'Autolesao / Suicidio', severity: 'high', icon: '🆘' },
+  impersonation:        { label: 'Falsa identidade', severity: 'medium', icon: '🎭' },
+  spam:                 { label: 'Spam / Propaganda', severity: 'low', icon: '📢' },
+  inappropriate_content:{ label: 'Conteudo inadequado', severity: 'medium', icon: '👎' },
+  privacy_violation:    { label: 'Violacao de privacidade', severity: 'medium', icon: '🔒' },
+  other:                { label: 'Outro', severity: 'medium', icon: '📝' },
+};
+
+export function useReports() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submitReport = useCallback(async (params: {
+    reportedUserId?: string;
+    reportedContentId?: string;
+    reportedContentType?: string;
+    reportType: ReportType;
+    description?: string;
+  }) => {
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      const severity = params.reportType === 'child_safety' ? 'critical'
+        : ['harassment', 'hate_speech', 'sexual_content', 'violence', 'self_harm'].includes(params.reportType) ? 'high'
+        : 'medium';
+
+      const { error } = await supabase.from('reports').insert({
+        reporter_id: user.id,
+        reported_user_id: params.reportedUserId || null,
+        reported_content_id: params.reportedContentId || null,
+        reported_content_type: params.reportedContentType || null,
+        report_type: params.reportType,
+        severity,
+        description: params.description || null,
+      });
+
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, []);
+
+  return { submitReport, isSubmitting };
 }

@@ -1,7 +1,186 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/NotificationsPanel.tsx",
-  "created_at": "2026-02-27T05:36:22.556Z",
-  "file_content": "import { useState, useRef, useEffect } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { Bell, X, Eye, Users, MessageCircle, Heart, Calendar, Flame, ShieldAlert, UserPlus, Check, CheckCheck } from \"lucide-react\";\nimport { useNotifications } from \"../../lib\";\nimport type { Notification } from \"../../lib\";\n\ninterface NotificationsPanelProps {\n  onNavigateToProfile?: (userId: string) => void;\n}\n\nconst NOTIF_ICONS: Record<string, typeof Bell> = {\n  profile_visit: Eye,\n  testimonial: Heart,\n  connection_request: UserPlus,\n  connection_accepted: Users,\n  new_comment: MessageCircle,\n  new_reaction: Heart,\n  new_message: MessageCircle,\n  community_message: MessageCircle,\n  event_reminder: Calendar,\n  daily_challenge: Flame,\n  system: Bell,\n  report_update: ShieldAlert,\n  ritual_reminder: Flame,\n  mention: MessageCircle,\n};\n\nconst NOTIF_COLORS: Record<string, string> = {\n  profile_visit: \"#81D8D0\",\n  testimonial: \"#FF6B35\",\n  connection_request: \"#81D8D0\",\n  connection_accepted: \"#0A8F85\",\n  new_comment: \"#81D8D0\",\n  new_reaction: \"#FF6B35\",\n  new_message: \"#81D8D0\",\n  daily_challenge: \"#C8102E\",\n  report_update: \"#C8102E\",\n  system: \"#999\",\n};\n\nfunction timeAgo(dateStr: string): string {\n  const diff = Date.now() - new Date(dateStr).getTime();\n  const mins = Math.floor(diff / 60000);\n  if (mins < 1) return \"agora\";\n  if (mins < 60) return `${mins}min`;\n  const hours = Math.floor(mins / 60);\n  if (hours < 24) return `${hours}h`;\n  const days = Math.floor(hours / 24);\n  if (days < 7) return `${days}d`;\n  return `${Math.floor(days / 7)}sem`;\n}\n\nexport function NotificationsPanel({ onNavigateToProfile }: NotificationsPanelProps) {\n  const [isOpen, setIsOpen] = useState(false);\n  const panelRef = useRef<HTMLDivElement>(null);\n  const { notifications, unreadCount, markAsRead, markAllAsRead, isLoading } = useNotifications();\n\n  // Fechar ao clicar fora\n  useEffect(() => {\n    const handleClickOutside = (e: MouseEvent) => {\n      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {\n        setIsOpen(false);\n      }\n    };\n    if (isOpen) document.addEventListener(\"mousedown\", handleClickOutside);\n    return () => document.removeEventListener(\"mousedown\", handleClickOutside);\n  }, [isOpen]);\n\n  const handleNotifClick = (notif: Notification) => {\n    if (!notif.is_read) markAsRead(notif.id);\n    if (notif.reference_type === \"user\" && notif.reference_id && onNavigateToProfile) {\n      onNavigateToProfile(notif.reference_id);\n    }\n    // Outros tipos podem navegar para posts, eventos, etc.\n  };\n\n  return (\n    <div className=\"relative\" ref={panelRef}>\n      {/* Botão do sino */}\n      <motion.button\n        onClick={() => setIsOpen(!isOpen)}\n        whileHover={{ scale: 1.05 }}\n        whileTap={{ scale: 0.95 }}\n        className=\"relative p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all\"\n      >\n        <Bell className=\"h-5 w-5\" />\n        {unreadCount > 0 && (\n          <motion.span\n            initial={{ scale: 0 }}\n            animate={{ scale: 1 }}\n            className=\"absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[#C8102E] text-white text-[10px] rounded-full px-1\"\n            style={{ fontWeight: 700 }}\n          >\n            {unreadCount > 99 ? \"99+\" : unreadCount}\n          </motion.span>\n        )}\n      </motion.button>\n\n      {/* Dropdown */}\n      <AnimatePresence>\n        {isOpen && (\n          <motion.div\n            initial={{ opacity: 0, y: 8, scale: 0.95 }}\n            animate={{ opacity: 1, y: 0, scale: 1 }}\n            exit={{ opacity: 0, y: 8, scale: 0.95 }}\n            transition={{ duration: 0.15 }}\n            className=\"absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-[#1E1E1E] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50\"\n          >\n            {/* Header */}\n            <div className=\"flex items-center justify-between px-5 py-3.5 border-b border-white/8\">\n              <h3 className=\"text-white text-sm\" style={{ fontWeight: 700 }}>Notificações</h3>\n              <div className=\"flex items-center gap-2\">\n                {unreadCount > 0 && (\n                  <button\n                    onClick={markAllAsRead}\n                    className=\"flex items-center gap-1 text-[11px] text-[#81D8D0] hover:text-[#81D8D0]/80 transition-colors\"\n                    style={{ fontWeight: 600 }}\n                  >\n                    <CheckCheck className=\"h-3.5 w-3.5\" />\n                    Marcar todas\n                  </button>\n                )}\n                <button onClick={() => setIsOpen(false)} className=\"text-white/30 hover:text-white/60 transition-colors\">\n                  <X className=\"h-4 w-4\" />\n                </button>\n              </div>\n            </div>\n\n            {/* Lista */}\n            <div className=\"overflow-y-auto max-h-[420px]\">\n              {isLoading ? (\n                <div className=\"p-8 text-center\">\n                  <div className=\"w-6 h-6 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto\" />\n                </div>\n              ) : notifications.length === 0 ? (\n                <div className=\"p-8 text-center\">\n                  <Bell className=\"h-8 w-8 text-white/15 mx-auto mb-3\" />\n                  <p className=\"text-white/40 text-sm\">Nenhuma notificação</p>\n                  <p className=\"text-white/20 text-xs mt-1\">Quando algo acontecer, aparece aqui</p>\n                </div>\n              ) : (\n                notifications.slice(0, 30).map((notif) => {\n                  const Icon = NOTIF_ICONS[notif.type] || Bell;\n                  const color = NOTIF_COLORS[notif.type] || \"#999\";\n                  return (\n                    <motion.button\n                      key={notif.id}\n                      onClick={() => handleNotifClick(notif)}\n                      className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition-colors ${\n                        notif.is_read ? \"hover:bg-white/3\" : \"bg-white/3 hover:bg-white/5\"\n                      }`}\n                    >\n                      {/* Icon */}\n                      <div\n                        className=\"w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5\"\n                        style={{ background: `${color}15`, border: `1px solid ${color}25` }}\n                      >\n                        <Icon className=\"h-4 w-4\" style={{ color }} />\n                      </div>\n\n                      {/* Content */}\n                      <div className=\"flex-1 min-w-0\">\n                        <p className={`text-sm leading-snug ${notif.is_read ? \"text-white/50\" : \"text-white/90\"}`}>\n                          <span style={{ fontWeight: notif.is_read ? 400 : 600 }}>{notif.title}</span>\n                        </p>\n                        {notif.content && (\n                          <p className=\"text-xs text-white/30 mt-0.5 truncate\">{notif.content}</p>\n                        )}\n                        <p className=\"text-[10px] text-white/20 mt-1\">{timeAgo(notif.created_at)}</p>\n                      </div>\n\n                      {/* Unread dot */}\n                      {!notif.is_read && (\n                        <div className=\"w-2 h-2 rounded-full bg-[#C8102E] flex-shrink-0 mt-2\" />\n                      )}\n                    </motion.button>\n                  );\n                })\n              )}\n            </div>\n          </motion.div>\n        )}\n      </AnimatePresence>\n    </div>\n  );\n}\n"
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Bell, X, Eye, Users, MessageCircle, Heart, Calendar, Flame, ShieldAlert, UserPlus, Check, CheckCheck } from "lucide-react";
+import { useNotifications } from "../../lib";
+import type { Notification } from "../../lib";
+
+interface NotificationsPanelProps {
+  onNavigateToProfile?: (userId: string) => void;
+}
+
+const NOTIF_ICONS: Record<string, typeof Bell> = {
+  profile_visit: Eye,
+  testimonial: Heart,
+  connection_request: UserPlus,
+  connection_accepted: Users,
+  new_comment: MessageCircle,
+  new_reaction: Heart,
+  new_message: MessageCircle,
+  community_message: MessageCircle,
+  event_reminder: Calendar,
+  daily_challenge: Flame,
+  system: Bell,
+  report_update: ShieldAlert,
+  ritual_reminder: Flame,
+  mention: MessageCircle,
+};
+
+const NOTIF_COLORS: Record<string, string> = {
+  profile_visit: "#81D8D0",
+  testimonial: "#FF6B35",
+  connection_request: "#81D8D0",
+  connection_accepted: "#0A8F85",
+  new_comment: "#81D8D0",
+  new_reaction: "#FF6B35",
+  new_message: "#81D8D0",
+  daily_challenge: "#C8102E",
+  report_update: "#C8102E",
+  system: "#999",
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "agora";
+  if (mins < 60) return `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return `${Math.floor(days / 7)}sem`;
+}
+
+export function NotificationsPanel({ onNavigateToProfile }: NotificationsPanelProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAsRead, markAllAsRead, isLoading } = useNotifications();
+
+  // Fechar ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const handleNotifClick = (notif: Notification) => {
+    if (!notif.is_read) markAsRead(notif.id);
+    if (notif.reference_type === "user" && notif.reference_id && onNavigateToProfile) {
+      onNavigateToProfile(notif.reference_id);
+    }
+    // Outros tipos podem navegar para posts, eventos, etc.
+  };
+
+  return (
+    <div className="relative" ref={panelRef}>
+      {/* Botão do sino */}
+      <motion.button
+        onClick={() => setIsOpen(!isOpen)}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="relative p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all"
+      >
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 && (
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-[#C8102E] text-white text-[10px] rounded-full px-1"
+            style={{ fontWeight: 700 }}
+          >
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </motion.span>
+        )}
+      </motion.button>
+
+      {/* Dropdown */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-[#1E1E1E] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/8">
+              <h3 className="text-white text-sm" style={{ fontWeight: 700 }}>Notificações</h3>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="flex items-center gap-1 text-[11px] text-[#81D8D0] hover:text-[#81D8D0]/80 transition-colors"
+                    style={{ fontWeight: 600 }}
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    Marcar todas
+                  </button>
+                )}
+                <button onClick={() => setIsOpen(false)} className="text-white/30 hover:text-white/60 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Lista */}
+            <div className="overflow-y-auto max-h-[420px]">
+              {isLoading ? (
+                <div className="p-8 text-center">
+                  <div className="w-6 h-6 border-2 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Bell className="h-8 w-8 text-white/15 mx-auto mb-3" />
+                  <p className="text-white/40 text-sm">Nenhuma notificação</p>
+                  <p className="text-white/20 text-xs mt-1">Quando algo acontecer, aparece aqui</p>
+                </div>
+              ) : (
+                notifications.slice(0, 30).map((notif) => {
+                  const Icon = NOTIF_ICONS[notif.type] || Bell;
+                  const color = NOTIF_COLORS[notif.type] || "#999";
+                  return (
+                    <motion.button
+                      key={notif.id}
+                      onClick={() => handleNotifClick(notif)}
+                      className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition-colors ${
+                        notif.is_read ? "hover:bg-white/3" : "bg-white/3 hover:bg-white/5"
+                      }`}
+                    >
+                      {/* Icon */}
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ background: `${color}15`, border: `1px solid ${color}25` }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color }} />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm leading-snug ${notif.is_read ? "text-white/50" : "text-white/90"}`}>
+                          <span style={{ fontWeight: notif.is_read ? 400 : 600 }}>{notif.title}</span>
+                        </p>
+                        {notif.content && (
+                          <p className="text-xs text-white/30 mt-0.5 truncate">{notif.content}</p>
+                        )}
+                        <p className="text-[10px] text-white/20 mt-1">{timeAgo(notif.created_at)}</p>
+                      </div>
+
+                      {/* Unread dot */}
+                      {!notif.is_read && (
+                        <div className="w-2 h-2 rounded-full bg-[#C8102E] flex-shrink-0 mt-2" />
+                      )}
+                    </motion.button>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }

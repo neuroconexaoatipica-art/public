@@ -1,7 +1,173 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useModerationActions.ts",
-  "created_at": "2026-02-27T05:36:06.535Z",
-  "file_content": "/**\n * useModerationActions — Hook para log imutavel de acoes moderativas\n * v1.1: Protecao juridica + rastreabilidade completa\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase, TIMEOUTS } from './supabase';\nimport { cleanTextInput } from './security';\n\nexport type ModerationActionType =\n  | 'warning'\n  | 'post_removed'\n  | 'comment_removed'\n  | 'user_suspended'\n  | 'user_banned'\n  | 'community_suspended'\n  | 'founder_demoted'\n  | 'report_resolved'\n  | 'report_dismissed';\n\nexport interface ModerationAction {\n  id: string;\n  moderator_id: string;\n  target_user_id: string | null;\n  target_post_id: string | null;\n  target_community_id: string | null;\n  action_type: ModerationActionType;\n  reason: string;\n  notes: string | null;\n  evidence_urls: string[] | null;\n  is_reversible: boolean;\n  reversed_at: string | null;\n  reversed_by: string | null;\n  created_at: string;\n  // Joined\n  moderator_name?: string;\n  target_user_name?: string;\n}\n\nexport function useModerationActions() {\n  const [actions, setActions] = useState<ModerationAction[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  const loadActions = useCallback(async (limit: number = 50) => {\n    setIsLoading(true);\n    setError(null);\n\n    try {\n      const { data, error: fetchError } = await supabase\n        .from('moderation_actions')\n        .select(`\n          *,\n          moderator:moderator_id (name, display_name),\n          target_user:target_user_id (name, display_name)\n        `)\n        .order('created_at', { ascending: false })\n        .limit(limit)\n        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n      if (fetchError) throw fetchError;\n\n      const mapped: ModerationAction[] = (data || []).map((a: any) => ({\n        ...a,\n        moderator_name: a.moderator?.display_name || a.moderator?.name || 'Moderador',\n        target_user_name: a.target_user?.display_name || a.target_user?.name || null,\n      }));\n\n      setActions(mapped);\n    } catch (err: any) {\n      console.error('[useModerationActions] Erro:', err);\n      setError(err.message || 'Erro ao carregar acoes');\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    loadActions();\n  }, [loadActions]);\n\n  /** Registrar nova acao moderativa (LOG IMUTAVEL) */\n  const logAction = useCallback(async (params: {\n    targetUserId?: string;\n    targetPostId?: string;\n    targetCommunityId?: string;\n    actionType: ModerationActionType;\n    reason: string;\n    notes?: string;\n    evidenceUrls?: string[];\n  }): Promise<{ success: boolean; error?: string }> => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const cleanedReason = cleanTextInput(params.reason, 1000);\n      if (!cleanedReason) return { success: false, error: 'Razao e obrigatoria' };\n\n      const { error: insertError } = await supabase\n        .from('moderation_actions')\n        .insert({\n          moderator_id: user.id,\n          target_user_id: params.targetUserId || null,\n          target_post_id: params.targetPostId || null,\n          target_community_id: params.targetCommunityId || null,\n          action_type: params.actionType,\n          reason: cleanedReason,\n          notes: params.notes ? cleanTextInput(params.notes, 2000) : null,\n          evidence_urls: params.evidenceUrls || null,\n        });\n\n      if (insertError) throw insertError;\n\n      await loadActions();\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useModerationActions] Erro ao registrar:', err);\n      return { success: false, error: err.message || 'Erro ao registrar acao' };\n    }\n  }, [loadActions]);\n\n  /** Reverter acao (somente super_admin) */\n  const reverseAction = useCallback(async (\n    actionId: string\n  ): Promise<{ success: boolean; error?: string }> => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const { error: updateError } = await supabase\n        .from('moderation_actions')\n        .update({\n          reversed_at: new Date().toISOString(),\n          reversed_by: user.id,\n        })\n        .eq('id', actionId)\n        .eq('is_reversible', true);\n\n      if (updateError) throw updateError;\n\n      await loadActions();\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useModerationActions] Erro ao reverter:', err);\n      return { success: false, error: err.message || 'Erro ao reverter acao' };\n    }\n  }, [loadActions]);\n\n  return {\n    actions,\n    isLoading,\n    error,\n    logAction,\n    reverseAction,\n    refreshActions: loadActions,\n    // Computed\n    activeActions: actions.filter(a => !a.reversed_at),\n    reversedActions: actions.filter(a => a.reversed_at),\n  };\n}\n\n/** Labels para tipos de acao */\nexport const ACTION_TYPE_LABELS: Record<ModerationActionType, string> = {\n  warning: 'Advertencia',\n  post_removed: 'Post removido',\n  comment_removed: 'Comentario removido',\n  user_suspended: 'Usuario suspenso',\n  user_banned: 'Usuario banido',\n  community_suspended: 'Comunidade suspensa',\n  founder_demoted: 'Founder rebaixado',\n  report_resolved: 'Denuncia resolvida',\n  report_dismissed: 'Denuncia dispensada',\n};\n"
+/**
+ * useModerationActions — Hook para log imutavel de acoes moderativas
+ * v1.1: Protecao juridica + rastreabilidade completa
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, TIMEOUTS } from './supabase';
+import { cleanTextInput } from './security';
+
+export type ModerationActionType =
+  | 'warning'
+  | 'post_removed'
+  | 'comment_removed'
+  | 'user_suspended'
+  | 'user_banned'
+  | 'community_suspended'
+  | 'founder_demoted'
+  | 'report_resolved'
+  | 'report_dismissed';
+
+export interface ModerationAction {
+  id: string;
+  moderator_id: string;
+  target_user_id: string | null;
+  target_post_id: string | null;
+  target_community_id: string | null;
+  action_type: ModerationActionType;
+  reason: string;
+  notes: string | null;
+  evidence_urls: string[] | null;
+  is_reversible: boolean;
+  reversed_at: string | null;
+  reversed_by: string | null;
+  created_at: string;
+  // Joined
+  moderator_name?: string;
+  target_user_name?: string;
 }
+
+export function useModerationActions() {
+  const [actions, setActions] = useState<ModerationAction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadActions = useCallback(async (limit: number = 50) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('moderation_actions')
+        .select(`
+          *,
+          moderator:moderator_id (name, display_name),
+          target_user:target_user_id (name, display_name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+      if (fetchError) throw fetchError;
+
+      const mapped: ModerationAction[] = (data || []).map((a: any) => ({
+        ...a,
+        moderator_name: a.moderator?.display_name || a.moderator?.name || 'Moderador',
+        target_user_name: a.target_user?.display_name || a.target_user?.name || null,
+      }));
+
+      setActions(mapped);
+    } catch (err: any) {
+      console.error('[useModerationActions] Erro:', err);
+      setError(err.message || 'Erro ao carregar acoes');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadActions();
+  }, [loadActions]);
+
+  /** Registrar nova acao moderativa (LOG IMUTAVEL) */
+  const logAction = useCallback(async (params: {
+    targetUserId?: string;
+    targetPostId?: string;
+    targetCommunityId?: string;
+    actionType: ModerationActionType;
+    reason: string;
+    notes?: string;
+    evidenceUrls?: string[];
+  }): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      const cleanedReason = cleanTextInput(params.reason, 1000);
+      if (!cleanedReason) return { success: false, error: 'Razao e obrigatoria' };
+
+      const { error: insertError } = await supabase
+        .from('moderation_actions')
+        .insert({
+          moderator_id: user.id,
+          target_user_id: params.targetUserId || null,
+          target_post_id: params.targetPostId || null,
+          target_community_id: params.targetCommunityId || null,
+          action_type: params.actionType,
+          reason: cleanedReason,
+          notes: params.notes ? cleanTextInput(params.notes, 2000) : null,
+          evidence_urls: params.evidenceUrls || null,
+        });
+
+      if (insertError) throw insertError;
+
+      await loadActions();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useModerationActions] Erro ao registrar:', err);
+      return { success: false, error: err.message || 'Erro ao registrar acao' };
+    }
+  }, [loadActions]);
+
+  /** Reverter acao (somente super_admin) */
+  const reverseAction = useCallback(async (
+    actionId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      const { error: updateError } = await supabase
+        .from('moderation_actions')
+        .update({
+          reversed_at: new Date().toISOString(),
+          reversed_by: user.id,
+        })
+        .eq('id', actionId)
+        .eq('is_reversible', true);
+
+      if (updateError) throw updateError;
+
+      await loadActions();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useModerationActions] Erro ao reverter:', err);
+      return { success: false, error: err.message || 'Erro ao reverter acao' };
+    }
+  }, [loadActions]);
+
+  return {
+    actions,
+    isLoading,
+    error,
+    logAction,
+    reverseAction,
+    refreshActions: loadActions,
+    // Computed
+    activeActions: actions.filter(a => !a.reversed_at),
+    reversedActions: actions.filter(a => a.reversed_at),
+  };
+}
+
+/** Labels para tipos de acao */
+export const ACTION_TYPE_LABELS: Record<ModerationActionType, string> = {
+  warning: 'Advertencia',
+  post_removed: 'Post removido',
+  comment_removed: 'Comentario removido',
+  user_suspended: 'Usuario suspenso',
+  user_banned: 'Usuario banido',
+  community_suspended: 'Comunidade suspensa',
+  founder_demoted: 'Founder rebaixado',
+  report_resolved: 'Denuncia resolvida',
+  report_dismissed: 'Denuncia dispensada',
+};

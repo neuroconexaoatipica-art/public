@@ -1,7 +1,47 @@
-{
-  "lote": 5,
-  "status": "pending",
-  "file_path": "src/main.tsx",
-  "created_at": "2026-02-27T05:36:28.731Z",
-  "file_content": "import { StrictMode } from 'react'\nimport { createRoot } from 'react-dom/client'\nimport App from './app/App'\nimport './styles/index.css'\n\n// Limpar cache problemático de versões anteriores\nconst CACHE_VERSION = 'v5';\nconst storedVersion = localStorage.getItem('app_version');\n\nif (storedVersion !== CACHE_VERSION) {\n  // Limpar tudo exceto dados essenciais do Supabase\n  const supabaseKeys = Object.keys(localStorage).filter(key => \n    key.startsWith('sb-') || key.includes('supabase')\n  );\n  \n  const supabaseData: Record<string, string> = {};\n  supabaseKeys.forEach(key => {\n    supabaseData[key] = localStorage.getItem(key) || '';\n  });\n  \n  // Limpar tudo\n  localStorage.clear();\n  sessionStorage.clear();\n  \n  // Restaurar dados do Supabase\n  Object.entries(supabaseData).forEach(([key, value]) => {\n    localStorage.setItem(key, value);\n  });\n  \n  // Salvar nova versão\n  localStorage.setItem('app_version', CACHE_VERSION);\n  \n  console.log('Cache limpo e atualizado para versão', CACHE_VERSION);\n}\n\n// Forçar atualização do SW em cada page load\nif ('serviceWorker' in navigator) {\n  navigator.serviceWorker.getRegistrations().then((regs) => {\n    regs.forEach((reg) => reg.update());\n  });\n}\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n)"
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './app/App'
+import './styles/index.css'
+
+// Limpar cache problemático de versões anteriores
+const CACHE_VERSION = 'v5';
+const storedVersion = localStorage.getItem('app_version');
+
+if (storedVersion !== CACHE_VERSION) {
+  // Limpar tudo exceto dados essenciais do Supabase
+  const supabaseKeys = Object.keys(localStorage).filter(key => 
+    key.startsWith('sb-') || key.includes('supabase')
+  );
+  
+  const supabaseData: Record<string, string> = {};
+  supabaseKeys.forEach(key => {
+    supabaseData[key] = localStorage.getItem(key) || '';
+  });
+  
+  // Limpar tudo
+  localStorage.clear();
+  sessionStorage.clear();
+  
+  // Restaurar dados do Supabase
+  Object.entries(supabaseData).forEach(([key, value]) => {
+    localStorage.setItem(key, value);
+  });
+  
+  // Salvar nova versão
+  localStorage.setItem('app_version', CACHE_VERSION);
+  
+  console.log('Cache limpo e atualizado para versão', CACHE_VERSION);
 }
+
+// Forçar atualização do SW em cada page load
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((reg) => reg.update());
+  });
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

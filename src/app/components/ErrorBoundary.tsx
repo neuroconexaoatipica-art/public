@@ -1,7 +1,70 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/ErrorBoundary.tsx",
-  "created_at": "2026-02-27T05:36:10.227Z",
-  "file_content": "import { Component } from \"react\";\nimport type { ReactNode, ErrorInfo } from \"react\";\n\ninterface ErrorBoundaryProps {\n  children: ReactNode;\n}\n\ninterface ErrorBoundaryState {\n  hasError: boolean;\n  error: Error | null;\n}\n\nexport class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {\n  constructor(props: ErrorBoundaryProps) {\n    super(props);\n    this.state = { hasError: false, error: null };\n  }\n\n  static getDerivedStateFromError(error: Error): ErrorBoundaryState {\n    return { hasError: true, error };\n  }\n\n  componentDidCatch(error: Error, errorInfo: ErrorInfo) {\n    console.error('[NeuroConexao] Erro capturado pelo ErrorBoundary:', error, errorInfo);\n  }\n\n  handleReload = () => {\n    this.setState({ hasError: false, error: null });\n    window.location.reload();\n  };\n\n  render() {\n    if (this.state.hasError) {\n      return (\n        <div className=\"min-h-screen bg-black flex items-center justify-center px-6\">\n          <div className=\"max-w-md w-full text-center\">\n            <div className=\"w-16 h-16 rounded-full bg-[#C8102E]/20 border-2 border-[#C8102E]/40 flex items-center justify-center mx-auto mb-6\">\n              <span className=\"text-3xl\">!</span>\n            </div>\n            <h1 className=\"text-2xl font-semibold text-white mb-3\">\n              Algo deu errado\n            </h1>\n            <p className=\"text-base text-white/70 mb-6 leading-relaxed\">\n              Pedimos desculpas pelo inconveniente. Um erro inesperado aconteceu. \n              Tente recarregar a pagina.\n            </p>\n            <button\n              onClick={this.handleReload}\n              className=\"px-8 py-3 bg-[#81D8D0] text-black rounded-xl font-bold hover:bg-[#81D8D0]/90 transition-colors\"\n            >\n              Recarregar pagina\n            </button>\n            {this.state.error && (\n              <details className=\"mt-6 text-left\">\n                <summary className=\"text-xs text-white/40 cursor-pointer hover:text-white/60 transition-colors\">\n                  Detalhes tecnicos\n                </summary>\n                <pre className=\"mt-2 p-3 bg-white/5 border border-white/10 rounded-lg text-xs text-white/50 overflow-auto max-h-32\">\n                  {this.state.error.message}\n                </pre>\n              </details>\n            )}\n          </div>\n        </div>\n      );\n    }\n\n    return this.props.children;\n  }\n}\n"
+import { Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[NeuroConexao] Erro capturado pelo ErrorBoundary:', error, errorInfo);
+  }
+
+  handleReload = () => {
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-black flex items-center justify-center px-6">
+          <div className="max-w-md w-full text-center">
+            <div className="w-16 h-16 rounded-full bg-[#C8102E]/20 border-2 border-[#C8102E]/40 flex items-center justify-center mx-auto mb-6">
+              <span className="text-3xl">!</span>
+            </div>
+            <h1 className="text-2xl font-semibold text-white mb-3">
+              Algo deu errado
+            </h1>
+            <p className="text-base text-white/70 mb-6 leading-relaxed">
+              Pedimos desculpas pelo inconveniente. Um erro inesperado aconteceu. 
+              Tente recarregar a pagina.
+            </p>
+            <button
+              onClick={this.handleReload}
+              className="px-8 py-3 bg-[#81D8D0] text-black rounded-xl font-bold hover:bg-[#81D8D0]/90 transition-colors"
+            >
+              Recarregar pagina
+            </button>
+            {this.state.error && (
+              <details className="mt-6 text-left">
+                <summary className="text-xs text-white/40 cursor-pointer hover:text-white/60 transition-colors">
+                  Detalhes tecnicos
+                </summary>
+                <pre className="mt-2 p-3 bg-white/5 border border-white/10 rounded-lg text-xs text-white/50 overflow-auto max-h-32">
+                  {this.state.error.message}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }

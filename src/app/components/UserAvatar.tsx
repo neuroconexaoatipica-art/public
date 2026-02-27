@@ -1,7 +1,46 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/UserAvatar.tsx",
-  "created_at": "2026-02-27T05:36:24.117Z",
-  "file_content": "interface UserAvatarProps {\n  name: string;\n  photoUrl?: string | null;\n  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';\n  onClick?: () => void;\n  className?: string;\n}\n\nconst sizeMap = {\n  xs: 'w-6 h-6',\n  sm: 'w-8 h-8',\n  md: 'w-10 h-10',\n  lg: 'w-12 h-12',\n  xl: 'w-16 h-16'\n};\n\nconst textSizeMap = {\n  xs: 'text-xs',\n  sm: 'text-sm',\n  md: 'text-base',\n  lg: 'text-lg',\n  xl: 'text-2xl'\n};\n\nexport function UserAvatar({ name, photoUrl, size = 'lg', onClick, className = '' }: UserAvatarProps) {\n  const initial = name ? name.charAt(0).toUpperCase() : '?';\n\n  return (\n    <div\n      onClick={onClick}\n      className={`${sizeMap[size]} rounded-full bg-white/10 flex items-center justify-center flex-shrink-0 overflow-hidden ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-[#81D8D0] transition-all' : ''} ${className}`}\n    >\n      {photoUrl ? (\n        <img\n          src={photoUrl}\n          alt={name}\n          className=\"w-full h-full object-cover\"\n        />\n      ) : (\n        <span className={`${textSizeMap[size]} font-semibold text-white/70`}>\n          {initial}\n        </span>\n      )}\n    </div>\n  );\n}"
+interface UserAvatarProps {
+  name: string;
+  photoUrl?: string | null;
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  onClick?: () => void;
+  className?: string;
+}
+
+const sizeMap = {
+  xs: 'w-6 h-6',
+  sm: 'w-8 h-8',
+  md: 'w-10 h-10',
+  lg: 'w-12 h-12',
+  xl: 'w-16 h-16'
+};
+
+const textSizeMap = {
+  xs: 'text-xs',
+  sm: 'text-sm',
+  md: 'text-base',
+  lg: 'text-lg',
+  xl: 'text-2xl'
+};
+
+export function UserAvatar({ name, photoUrl, size = 'lg', onClick, className = '' }: UserAvatarProps) {
+  const initial = name ? name.charAt(0).toUpperCase() : '?';
+
+  return (
+    <div
+      onClick={onClick}
+      className={`${sizeMap[size]} rounded-full bg-white/10 flex items-center justify-center flex-shrink-0 overflow-hidden ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-[#81D8D0] transition-all' : ''} ${className}`}
+    >
+      {photoUrl ? (
+        <img
+          src={photoUrl}
+          alt={name}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <span className={`${textSizeMap[size]} font-semibold text-white/70`}>
+          {initial}
+        </span>
+      )}
+    </div>
+  );
 }

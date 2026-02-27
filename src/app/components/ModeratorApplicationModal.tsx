@@ -1,7 +1,255 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/ModeratorApplicationModal.tsx",
-  "created_at": "2026-02-27T05:36:27.265Z",
-  "file_content": "/**\n * ModeratorApplicationModal — Formulario para candidatura a moderador\n * \n * O membro pode se candidatar para moderar uma comunidade.\n * A candidatura e salva em `contact_requests` com reason = \"moderator_application\".\n * A super_admin (Mila) ve no AdminDashboard e decide.\n */\n\nimport { useState } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport {\n  X, Shield, Send, Loader2, CheckCircle, Crown, Heart, AlertCircle\n} from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\nimport { useProfileContext } from \"../../lib/ProfileContext\";\nimport { useCommunitiesContext } from \"../../lib/CommunitiesContext\";\n\ninterface ModeratorApplicationModalProps {\n  isOpen: boolean;\n  onClose: () => void;\n}\n\nexport function ModeratorApplicationModal({ isOpen, onClose }: ModeratorApplicationModalProps) {\n  const { user } = useProfileContext();\n  const { communities } = useCommunitiesContext();\n\n  const [selectedCommunity, setSelectedCommunity] = useState(\"\");\n  const [motivation, setMotivation] = useState(\"\");\n  const [experience, setExperience] = useState(\"\");\n  const [availability, setAvailability] = useState(\"\");\n  const [sending, setSending] = useState(false);\n  const [sent, setSent] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  // Comunidades que precisam de moderador\n  const availableCommunities = communities.filter(\n    c => c.needs_moderator && !c.owner_id\n  );\n  // Todas as comunidades (para quem quer se voluntariar em qualquer uma)\n  const allCommunities = communities.filter(\n    c => !c.id.startsWith(\"pending-\") && !c.id.startsWith(\"local-\")\n  );\n\n  const handleSubmit = async () => {\n    if (!user || !motivation.trim()) return;\n    setSending(true);\n    setError(null);\n\n    try {\n      const communityName = selectedCommunity\n        ? allCommunities.find(c => c.id === selectedCommunity)?.name || \"Nao especificada\"\n        : \"Qualquer comunidade\";\n\n      const fullMessage = [\n        `[CANDIDATURA A MODERADOR]`,\n        `Membro: ${user.name} (${user.id})`,\n        `Comunidade: ${communityName}`,\n        `\\n--- MOTIVACAO ---`,\n        motivation.trim(),\n        experience.trim() ? `\\n--- EXPERIENCIA ---\\n${experience.trim()}` : \"\",\n        availability.trim() ? `\\n--- DISPONIBILIDADE ---\\n${availability.trim()}` : \"\",\n      ].filter(Boolean).join(\"\\n\");\n\n      const { error: insertError } = await supabase.from(\"contact_requests\").insert({\n        user_id: user.id,\n        reason: \"other\",\n        message: fullMessage,\n        status: \"pending\",\n      });\n\n      if (insertError) throw insertError;\n\n      setSent(true);\n      setTimeout(() => {\n        onClose();\n        // Reset apos fechar\n        setTimeout(() => {\n          setSent(false);\n          setSelectedCommunity(\"\");\n          setMotivation(\"\");\n          setExperience(\"\");\n          setAvailability(\"\");\n        }, 300);\n      }, 2500);\n    } catch (err: any) {\n      console.error(\"[ModeratorApplication] Erro:\", err);\n      setError(\"Erro ao enviar candidatura. Tente novamente.\");\n    } finally {\n      setSending(false);\n    }\n  };\n\n  if (!isOpen) return null;\n\n  return (\n    <AnimatePresence>\n      <motion.div\n        initial={{ opacity: 0 }}\n        animate={{ opacity: 1 }}\n        exit={{ opacity: 0 }}\n        className=\"fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm\"\n        onClick={(e) => e.target === e.currentTarget && onClose()}\n      >\n        <motion.div\n          initial={{ opacity: 0, scale: 0.95, y: 20 }}\n          animate={{ opacity: 1, scale: 1, y: 0 }}\n          exit={{ opacity: 0, scale: 0.95, y: 20 }}\n          className=\"bg-[#1A1A1A] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto\"\n        >\n          {/* Header */}\n          <div className=\"sticky top-0 bg-[#1A1A1A] border-b border-white/10 px-6 py-4 flex items-center justify-between z-10\">\n            <div className=\"flex items-center gap-3\">\n              <div className=\"w-10 h-10 rounded-xl bg-[#C8102E]/15 flex items-center justify-center\">\n                <Shield className=\"h-5 w-5 text-[#C8102E]\" />\n              </div>\n              <div>\n                <h2 className=\"text-white font-bold\">Candidatura a Moderador</h2>\n                <span className=\"text-[10px] text-white/40\">Mostre porque voce seria ideal</span>\n              </div>\n            </div>\n            <button onClick={onClose} className=\"text-white/40 hover:text-white transition-colors\">\n              <X className=\"h-5 w-5\" />\n            </button>\n          </div>\n\n          {sent ? (\n            <div className=\"p-8 text-center\">\n              <motion.div\n                initial={{ scale: 0 }}\n                animate={{ scale: 1 }}\n                transition={{ type: \"spring\", stiffness: 200 }}\n              >\n                <CheckCircle className=\"h-16 w-16 text-[#81D8D0] mx-auto mb-4\" />\n              </motion.div>\n              <h3 className=\"text-xl text-white font-bold mb-2\">Candidatura enviada!</h3>\n              <p className=\"text-sm text-white/50\">\n                A Mila vai analisar sua candidatura com carinho. Voce recebera uma resposta em breve.\n              </p>\n            </div>\n          ) : (\n            <div className=\"p-6 space-y-5\">\n              {/* Info box */}\n              <div className=\"bg-[#81D8D0]/10 border border-[#81D8D0]/20 rounded-xl p-4\">\n                <div className=\"flex items-start gap-3\">\n                  <Heart className=\"h-5 w-5 text-[#81D8D0] mt-0.5 flex-shrink-0\" />\n                  <div>\n                    <p className=\"text-xs text-[#81D8D0] font-semibold mb-1\">O que faz um moderador?</p>\n                    <ul className=\"text-[11px] text-white/50 space-y-1 leading-relaxed\">\n                      <li>Acolhe novos membros e aprova pedidos de entrada</li>\n                      <li>Cuida do manifesto e dos rituais da comunidade</li>\n                      <li>Modera conteudo e trata denuncias com empatia</li>\n                      <li>Participa do nucleo estrategico com outros founders</li>\n                    </ul>\n                  </div>\n                </div>\n              </div>\n\n              {/* Comunidade */}\n              <div>\n                <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                  Para qual comunidade? <span className=\"text-white/30\">(opcional)</span>\n                </label>\n                <select\n                  value={selectedCommunity}\n                  onChange={(e) => setSelectedCommunity(e.target.value)}\n                  className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:border-[#81D8D0]/50 focus:outline-none appearance-none\"\n                >\n                  <option value=\"\">Qualquer comunidade que precisar</option>\n                  {availableCommunities.length > 0 && (\n                    <optgroup label=\"Precisando de moderador\">\n                      {availableCommunities.map(c => (\n                        <option key={c.id} value={c.id}>\n                          {c.name} (aguardando fundador)\n                        </option>\n                      ))}\n                    </optgroup>\n                  )}\n                  <optgroup label=\"Todas as comunidades\">\n                    {allCommunities.map(c => (\n                      <option key={c.id} value={c.id}>{c.name}</option>\n                    ))}\n                  </optgroup>\n                </select>\n              </div>\n\n              {/* Motivacao */}\n              <div>\n                <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                  Por que voce quer moderar? <span className=\"text-[#C8102E]\">*</span>\n                </label>\n                <textarea\n                  value={motivation}\n                  onChange={(e) => setMotivation(e.target.value)}\n                  rows={4}\n                  className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none resize-y\"\n                  placeholder=\"Conte o que te motiva a cuidar de um territorio...\"\n                />\n              </div>\n\n              {/* Experiencia */}\n              <div>\n                <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                  Tem experiencia com moderacao? <span className=\"text-white/30\">(opcional)</span>\n                </label>\n                <textarea\n                  value={experience}\n                  onChange={(e) => setExperience(e.target.value)}\n                  rows={2}\n                  className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none resize-y\"\n                  placeholder=\"Grupos, comunidades, voluntariado...\"\n                />\n              </div>\n\n              {/* Disponibilidade */}\n              <div>\n                <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                  Disponibilidade semanal <span className=\"text-white/30\">(opcional)</span>\n                </label>\n                <input\n                  type=\"text\"\n                  value={availability}\n                  onChange={(e) => setAvailability(e.target.value)}\n                  className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none\"\n                  placeholder=\"Ex: 3-5h por semana, noites e fins de semana\"\n                />\n              </div>\n\n              {/* Error */}\n              {error && (\n                <div className=\"flex items-center gap-2 px-3 py-2 bg-[#C8102E]/10 border border-[#C8102E]/25 rounded-xl\">\n                  <AlertCircle className=\"h-4 w-4 text-[#C8102E]\" />\n                  <span className=\"text-xs text-[#C8102E]\">{error}</span>\n                </div>\n              )}\n\n              {/* Submit */}\n              <button\n                onClick={handleSubmit}\n                disabled={!motivation.trim() || sending}\n                className=\"w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-[#C8102E] hover:bg-[#A50D24] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all\"\n              >\n                {sending ? (\n                  <Loader2 className=\"h-4 w-4 animate-spin\" />\n                ) : (\n                  <Send className=\"h-4 w-4\" />\n                )}\n                {sending ? \"Enviando...\" : \"Enviar candidatura\"}\n              </button>\n            </div>\n          )}\n        </motion.div>\n      </motion.div>\n    </AnimatePresence>\n  );\n}\n"
+/**
+ * ModeratorApplicationModal — Formulario para candidatura a moderador
+ * 
+ * O membro pode se candidatar para moderar uma comunidade.
+ * A candidatura e salva em `contact_requests` com reason = "moderator_application".
+ * A super_admin (Mila) ve no AdminDashboard e decide.
+ */
+
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  X, Shield, Send, Loader2, CheckCircle, Crown, Heart, AlertCircle
+} from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useProfileContext } from "../../lib/ProfileContext";
+import { useCommunitiesContext } from "../../lib/CommunitiesContext";
+
+interface ModeratorApplicationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function ModeratorApplicationModal({ isOpen, onClose }: ModeratorApplicationModalProps) {
+  const { user } = useProfileContext();
+  const { communities } = useCommunitiesContext();
+
+  const [selectedCommunity, setSelectedCommunity] = useState("");
+  const [motivation, setMotivation] = useState("");
+  const [experience, setExperience] = useState("");
+  const [availability, setAvailability] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Comunidades que precisam de moderador
+  const availableCommunities = communities.filter(
+    c => c.needs_moderator && !c.owner_id
+  );
+  // Todas as comunidades (para quem quer se voluntariar em qualquer uma)
+  const allCommunities = communities.filter(
+    c => !c.id.startsWith("pending-") && !c.id.startsWith("local-")
+  );
+
+  const handleSubmit = async () => {
+    if (!user || !motivation.trim()) return;
+    setSending(true);
+    setError(null);
+
+    try {
+      const communityName = selectedCommunity
+        ? allCommunities.find(c => c.id === selectedCommunity)?.name || "Nao especificada"
+        : "Qualquer comunidade";
+
+      const fullMessage = [
+        `[CANDIDATURA A MODERADOR]`,
+        `Membro: ${user.name} (${user.id})`,
+        `Comunidade: ${communityName}`,
+        `\n--- MOTIVACAO ---`,
+        motivation.trim(),
+        experience.trim() ? `\n--- EXPERIENCIA ---\n${experience.trim()}` : "",
+        availability.trim() ? `\n--- DISPONIBILIDADE ---\n${availability.trim()}` : "",
+      ].filter(Boolean).join("\n");
+
+      const { error: insertError } = await supabase.from("contact_requests").insert({
+        user_id: user.id,
+        reason: "other",
+        message: fullMessage,
+        status: "pending",
+      });
+
+      if (insertError) throw insertError;
+
+      setSent(true);
+      setTimeout(() => {
+        onClose();
+        // Reset apos fechar
+        setTimeout(() => {
+          setSent(false);
+          setSelectedCommunity("");
+          setMotivation("");
+          setExperience("");
+          setAvailability("");
+        }, 300);
+      }, 2500);
+    } catch (err: any) {
+      console.error("[ModeratorApplication] Erro:", err);
+      setError("Erro ao enviar candidatura. Tente novamente.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-[#1A1A1A] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        >
+          {/* Header */}
+          <div className="sticky top-0 bg-[#1A1A1A] border-b border-white/10 px-6 py-4 flex items-center justify-between z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#C8102E]/15 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-[#C8102E]" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold">Candidatura a Moderador</h2>
+                <span className="text-[10px] text-white/40">Mostre porque voce seria ideal</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {sent ? (
+            <div className="p-8 text-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200 }}
+              >
+                <CheckCircle className="h-16 w-16 text-[#81D8D0] mx-auto mb-4" />
+              </motion.div>
+              <h3 className="text-xl text-white font-bold mb-2">Candidatura enviada!</h3>
+              <p className="text-sm text-white/50">
+                A Mila vai analisar sua candidatura com carinho. Voce recebera uma resposta em breve.
+              </p>
+            </div>
+          ) : (
+            <div className="p-6 space-y-5">
+              {/* Info box */}
+              <div className="bg-[#81D8D0]/10 border border-[#81D8D0]/20 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Heart className="h-5 w-5 text-[#81D8D0] mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-[#81D8D0] font-semibold mb-1">O que faz um moderador?</p>
+                    <ul className="text-[11px] text-white/50 space-y-1 leading-relaxed">
+                      <li>Acolhe novos membros e aprova pedidos de entrada</li>
+                      <li>Cuida do manifesto e dos rituais da comunidade</li>
+                      <li>Modera conteudo e trata denuncias com empatia</li>
+                      <li>Participa do nucleo estrategico com outros founders</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comunidade */}
+              <div>
+                <label className="text-xs text-white/60 font-semibold mb-2 block">
+                  Para qual comunidade? <span className="text-white/30">(opcional)</span>
+                </label>
+                <select
+                  value={selectedCommunity}
+                  onChange={(e) => setSelectedCommunity(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:border-[#81D8D0]/50 focus:outline-none appearance-none"
+                >
+                  <option value="">Qualquer comunidade que precisar</option>
+                  {availableCommunities.length > 0 && (
+                    <optgroup label="Precisando de moderador">
+                      {availableCommunities.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} (aguardando fundador)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Todas as comunidades">
+                    {allCommunities.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Motivacao */}
+              <div>
+                <label className="text-xs text-white/60 font-semibold mb-2 block">
+                  Por que voce quer moderar? <span className="text-[#C8102E]">*</span>
+                </label>
+                <textarea
+                  value={motivation}
+                  onChange={(e) => setMotivation(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none resize-y"
+                  placeholder="Conte o que te motiva a cuidar de um territorio..."
+                />
+              </div>
+
+              {/* Experiencia */}
+              <div>
+                <label className="text-xs text-white/60 font-semibold mb-2 block">
+                  Tem experiencia com moderacao? <span className="text-white/30">(opcional)</span>
+                </label>
+                <textarea
+                  value={experience}
+                  onChange={(e) => setExperience(e.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none resize-y"
+                  placeholder="Grupos, comunidades, voluntariado..."
+                />
+              </div>
+
+              {/* Disponibilidade */}
+              <div>
+                <label className="text-xs text-white/60 font-semibold mb-2 block">
+                  Disponibilidade semanal <span className="text-white/30">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={availability}
+                  onChange={(e) => setAvailability(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none"
+                  placeholder="Ex: 3-5h por semana, noites e fins de semana"
+                />
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-[#C8102E]/10 border border-[#C8102E]/25 rounded-xl">
+                  <AlertCircle className="h-4 w-4 text-[#C8102E]" />
+                  <span className="text-xs text-[#C8102E]">{error}</span>
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                onClick={handleSubmit}
+                disabled={!motivation.trim() || sending}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-[#C8102E] hover:bg-[#A50D24] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all"
+              >
+                {sending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {sending ? "Enviando..." : "Enviar candidatura"}
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }

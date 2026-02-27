@@ -1,7 +1,82 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useReactions.ts",
-  "created_at": "2026-02-27T05:36:07.729Z",
-  "file_content": "import { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\n\nexport type ReactionType = 'senti_isso' | 'me_provocou' | 'gratidao' | 'intenso' | 'coragem' | 'lucidez';\n\nexport const REACTION_LABELS: Record<ReactionType, { emoji: string; label: string }> = {\n  senti_isso:   { emoji: '💔', label: 'Senti isso' },\n  me_provocou:  { emoji: '⚡', label: 'Me provocou' },\n  gratidao:     { emoji: '🙏', label: 'Gratidao' },\n  intenso:      { emoji: '🔥', label: 'Intenso' },\n  coragem:      { emoji: '🛡️', label: 'Coragem' },\n  lucidez:      { emoji: '💎', label: 'Lucidez' },\n};\n\nexport interface ReactionCount {\n  type: ReactionType;\n  count: number;\n}\n\nexport function useReactions(postId: string) {\n  const [counts, setCounts] = useState<ReactionCount[]>([]);\n  const [myReaction, setMyReaction] = useState<ReactionType | null>(null);\n  const [totalCount, setTotalCount] = useState(0);\n\n  const load = useCallback(async () => {\n    if (!postId) return;\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n\n      // Buscar todas as reacoes deste post\n      const { data, error } = await supabase\n        .from('reactions')\n        .select('reaction_type, user_id')\n        .eq('post_id', postId);\n\n      if (error) throw error;\n\n      // Contar por tipo\n      const countMap: Record<string, number> = {};\n      let myR: ReactionType | null = null;\n      (data || []).forEach(r => {\n        countMap[r.reaction_type] = (countMap[r.reaction_type] || 0) + 1;\n        if (user && r.user_id === user.id) myR = r.reaction_type as ReactionType;\n      });\n\n      const countsArr: ReactionCount[] = Object.entries(countMap).map(([type, count]) => ({ type: type as ReactionType, count }));\n      setCounts(countsArr);\n      setMyReaction(myR);\n      setTotalCount((data || []).length);\n    } catch (err) {\n      console.error('[useReactions] Erro:', err);\n    }\n  }, [postId]);\n\n  useEffect(() => { load(); }, [load]);\n\n  const toggleReaction = useCallback(async (type: ReactionType) => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return;\n\n      if (myReaction === type) {\n        // Remover reacao\n        await supabase.from('reactions').delete().eq('user_id', user.id).eq('post_id', postId);\n        setMyReaction(null);\n      } else if (myReaction) {\n        // Trocar tipo\n        await supabase.from('reactions').update({ reaction_type: type }).eq('user_id', user.id).eq('post_id', postId);\n        setMyReaction(type);\n      } else {\n        // Nova reacao\n        await supabase.from('reactions').insert({ user_id: user.id, post_id: postId, reaction_type: type });\n        setMyReaction(type);\n      }\n      await load();\n    } catch (err) {\n      console.error('[useReactions] Erro ao reagir:', err);\n    }\n  }, [myReaction, postId, load]);\n\n  return { counts, myReaction, totalCount, toggleReaction };\n}\n"
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from './supabase';
+
+export type ReactionType = 'senti_isso' | 'me_provocou' | 'gratidao' | 'intenso' | 'coragem' | 'lucidez';
+
+export const REACTION_LABELS: Record<ReactionType, { emoji: string; label: string }> = {
+  senti_isso:   { emoji: '💔', label: 'Senti isso' },
+  me_provocou:  { emoji: '⚡', label: 'Me provocou' },
+  gratidao:     { emoji: '🙏', label: 'Gratidao' },
+  intenso:      { emoji: '🔥', label: 'Intenso' },
+  coragem:      { emoji: '🛡️', label: 'Coragem' },
+  lucidez:      { emoji: '💎', label: 'Lucidez' },
+};
+
+export interface ReactionCount {
+  type: ReactionType;
+  count: number;
+}
+
+export function useReactions(postId: string) {
+  const [counts, setCounts] = useState<ReactionCount[]>([]);
+  const [myReaction, setMyReaction] = useState<ReactionType | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const load = useCallback(async () => {
+    if (!postId) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Buscar todas as reacoes deste post
+      const { data, error } = await supabase
+        .from('reactions')
+        .select('reaction_type, user_id')
+        .eq('post_id', postId);
+
+      if (error) throw error;
+
+      // Contar por tipo
+      const countMap: Record<string, number> = {};
+      let myR: ReactionType | null = null;
+      (data || []).forEach(r => {
+        countMap[r.reaction_type] = (countMap[r.reaction_type] || 0) + 1;
+        if (user && r.user_id === user.id) myR = r.reaction_type as ReactionType;
+      });
+
+      const countsArr: ReactionCount[] = Object.entries(countMap).map(([type, count]) => ({ type: type as ReactionType, count }));
+      setCounts(countsArr);
+      setMyReaction(myR);
+      setTotalCount((data || []).length);
+    } catch (err) {
+      console.error('[useReactions] Erro:', err);
+    }
+  }, [postId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleReaction = useCallback(async (type: ReactionType) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (myReaction === type) {
+        // Remover reacao
+        await supabase.from('reactions').delete().eq('user_id', user.id).eq('post_id', postId);
+        setMyReaction(null);
+      } else if (myReaction) {
+        // Trocar tipo
+        await supabase.from('reactions').update({ reaction_type: type }).eq('user_id', user.id).eq('post_id', postId);
+        setMyReaction(type);
+      } else {
+        // Nova reacao
+        await supabase.from('reactions').insert({ user_id: user.id, post_id: postId, reaction_type: type });
+        setMyReaction(type);
+      }
+      await load();
+    } catch (err) {
+      console.error('[useReactions] Erro ao reagir:', err);
+    }
+  }, [myReaction, postId, load]);
+
+  return { counts, myReaction, totalCount, toggleReaction };
 }

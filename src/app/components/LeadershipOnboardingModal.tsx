@@ -1,7 +1,744 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/LeadershipOnboardingModal.tsx",
-  "created_at": "2026-02-27T05:36:28.573Z",
-  "file_content": "/**\n * LeadershipOnboardingModal — Fase 6: Onboarding de Lideranca\n *\n * Modal multi-step para founders/moderators:\n *   Etapa 1: Convocacao — o que e lideranca aqui\n *   Etapa 2: Escolha de comunidade (awaiting_founder) OU criar propria\n *   Etapa 3: Responsabilidades — checklist de compromissos\n *   Etapa 4: Aceite formal + indicacao de co-moderador\n *\n * No fim:\n *   - Grava leadership_onboarding_done = true em public.users\n *   - Grava dados em contact_requests com prefixo [LEADERSHIP_ONBOARDING]\n *   - Atualiza owner_id da comunidade escolhida (se awaiting_founder)\n */\n\nimport { useState, useEffect } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport {\n  X, ArrowRight, ArrowLeft, CheckCircle, Loader2, Crown,\n  Shield, Users, Flame, BookOpen, AlertTriangle, Plus,\n  Heart, Eye, Radio, Scale, Sparkles\n} from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\nimport { useProfileContext } from \"../../lib/ProfileContext\";\nimport { COMMUNITIES_CONFIG } from \"../../lib/communitiesConfig\";\nimport type { CommunityConfig } from \"../../lib/communitiesConfig\";\n\ninterface LeadershipOnboardingModalProps {\n  isOpen: boolean;\n  onClose: () => void;\n  onComplete: () => void;\n}\n\n// Responsabilidades que o founder deve aceitar\nconst RESPONSIBILITIES = [\n  {\n    key: \"moderar\",\n    icon: Shield,\n    title: \"Moderar com presenca\",\n    desc: \"Manter o espaco seguro. Remover conteudo que viole os principios. Agir com firmeza e empatia.\",\n  },\n  {\n    key: \"rituais\",\n    icon: Flame,\n    title: \"Organizar rituais e encontros\",\n    desc: \"Criar rodas de escuta, debates, sessoes de foco. A comunidade so vive se voce convoca.\",\n  },\n  {\n    key: \"cultura\",\n    icon: Heart,\n    title: \"Proteger a cultura\",\n    desc: \"Definir manifesto, tom e limites. Voce e quem decide o que cabe e o que nao cabe.\",\n  },\n  {\n    key: \"escalar\",\n    icon: AlertTriangle,\n    title: \"Escalar quando necessario\",\n    desc: \"Situacoes graves vao direto pra Mila (super_admin). Voce nao carrega tudo sozinho(a).\",\n  },\n  {\n    key: \"presenca\",\n    icon: Eye,\n    title: \"Estar presente\",\n    desc: \"Lideranca aqui nao e cargo — e presenca. Se sumir, a comunidade morre.\",\n  },\n  {\n    key: \"manifesto\",\n    icon: BookOpen,\n    title: \"Criar o manifesto da comunidade\",\n    desc: \"Voce tem a obrigacao de escrever o manifesto. Ele define a alma do espaco.\",\n  },\n];\n\nexport function LeadershipOnboardingModal({\n  isOpen,\n  onClose,\n  onComplete,\n}: LeadershipOnboardingModalProps) {\n  const { user, refreshProfile } = useProfileContext();\n\n  const [currentStep, setCurrentStep] = useState(0);\n  const [isSubmitting, setIsSubmitting] = useState(false);\n\n  // Step 2: Community choice\n  const [choiceType, setChoiceType] = useState<\"existing\" | \"create\" | null>(null);\n  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);\n  const [newCommunityName, setNewCommunityName] = useState(\"\");\n  const [newCommunityDesc, setNewCommunityDesc] = useState(\"\");\n\n  // Step 3: Responsibilities\n  const [acceptedResponsibilities, setAcceptedResponsibilities] = useState<Set<string>>(new Set());\n\n  // Step 4: Final\n  const [coModeratorName, setCoModeratorName] = useState(\"\");\n  const [leadershipAccepted, setLeadershipAccepted] = useState(false);\n\n  const totalSteps = 4;\n\n  // Comunidades awaiting_founder\n  const awaitingCommunities = COMMUNITIES_CONFIG.filter(\n    (c) => c.status === \"awaiting_founder\"\n  );\n\n  // Reset ao abrir\n  useEffect(() => {\n    if (!isOpen) return;\n    setCurrentStep(0);\n    setChoiceType(null);\n    setSelectedCommunity(null);\n    setNewCommunityName(\"\");\n    setNewCommunityDesc(\"\");\n    setAcceptedResponsibilities(new Set());\n    setCoModeratorName(\"\");\n    setLeadershipAccepted(false);\n    setIsSubmitting(false);\n  }, [isOpen]);\n\n  const toggleResponsibility = (key: string) => {\n    setAcceptedResponsibilities((prev) => {\n      const next = new Set(prev);\n      if (next.has(key)) {\n        next.delete(key);\n      } else {\n        next.add(key);\n      }\n      return next;\n    });\n  };\n\n  const canProceed = () => {\n    switch (currentStep) {\n      case 0:\n        return true; // Step 1 is informational\n      case 1:\n        if (choiceType === \"existing\") return !!selectedCommunity;\n        if (choiceType === \"create\") return newCommunityName.trim().length >= 3 && newCommunityDesc.trim().length >= 10;\n        return false;\n      case 2:\n        return acceptedResponsibilities.size === RESPONSIBILITIES.length;\n      case 3:\n        return leadershipAccepted;\n      default:\n        return false;\n    }\n  };\n\n  const handleNext = () => {\n    if (currentStep < totalSteps - 1) {\n      setCurrentStep(currentStep + 1);\n    } else {\n      handleFinalize();\n    }\n  };\n\n  const handleBack = () => {\n    if (currentStep > 0) {\n      setCurrentStep(currentStep - 1);\n    }\n  };\n\n  const handleFinalize = async () => {\n    if (!user?.id) return;\n    setIsSubmitting(true);\n\n    try {\n      // 1. Gravar leadership_onboarding_done = true\n      const { error: updateError } = await supabase\n        .from(\"users\")\n        .update({ leadership_onboarding_done: true })\n        .eq(\"id\", user.id);\n\n      if (updateError) {\n        console.error(\"[LeadershipOnboarding] Erro ao atualizar usuario:\", updateError);\n      }\n\n      // 2. Se escolheu comunidade existente, TENTAR atualizar owner_id\n      // NOTA: RLS pode bloquear este UPDATE. Se falhar, a info fica salva\n      // no contact_requests e a Mila faz manualmente no Supabase Dashboard.\n      let communityInfo = \"\";\n      let ownerIdSet = false;\n      if (choiceType === \"existing\" && selectedCommunity) {\n        communityInfo = `Comunidade escolhida: ${selectedCommunity}`;\n\n        // Buscar o ID real da comunidade no banco\n        const { data: dbCommunity } = await supabase\n          .from(\"communities\")\n          .select(\"id\")\n          .eq(\"name\", selectedCommunity)\n          .single();\n\n        if (dbCommunity?.id) {\n          const { data: updated, error: ownerError } = await supabase\n            .from(\"communities\")\n            .update({ owner_id: user.id, needs_moderator: false })\n            .eq(\"id\", dbCommunity.id)\n            .select(\"id\")\n            .single();\n\n          if (ownerError || !updated) {\n            console.warn(\"[LeadershipOnboarding] owner_id nao atualizado (RLS provavel). Mila fara manualmente.\", ownerError);\n            communityInfo += ` [ACAO NECESSARIA: setar owner_id = ${user.id} na comunidade \"${selectedCommunity}\" (id: ${dbCommunity.id})]`;\n          } else {\n            ownerIdSet = true;\n            console.log(`[LeadershipOnboarding] owner_id setado com sucesso para comunidade ${selectedCommunity}`);\n          }\n        }\n      } else if (choiceType === \"create\") {\n        communityInfo = `Nova comunidade proposta: \"${newCommunityName.trim()}\" — ${newCommunityDesc.trim()} [ACAO NECESSARIA: criar comunidade no banco]`;\n      }\n\n      // 3. Gravar dados do onboarding em contact_requests\n      // Este INSERT funciona via RLS (ja testado em ContactFounderModal, PulsoVivo, etc.)\n      const onboardingData = [\n        `[LEADERSHIP_ONBOARDING]`,\n        `Founder: ${user.display_name || user.name} (${user.id})`,\n        communityInfo,\n        ownerIdSet ? \"owner_id: OK\" : \"owner_id: PENDENTE (Mila precisa setar)\",\n        coModeratorName.trim()\n          ? `Co-moderador indicado: ${coModeratorName.trim()}`\n          : \"Sem co-moderador indicado\",\n        `Responsabilidades aceitas: ${RESPONSIBILITIES.map((r) => r.key).join(\", \")}`,\n        `Data: ${new Date().toISOString()}`,\n      ].join(\" | \");\n\n      const { error: contactError } = await supabase\n        .from(\"contact_requests\")\n        .insert({\n          user_id: user.id,\n          reason: \"other\",\n          message: onboardingData,\n          status: \"pending\",\n        });\n\n      if (contactError) {\n        console.error(\"[LeadershipOnboarding] Erro ao salvar contact_request:\", contactError);\n      }\n\n      // 4. Refresh profile para pegar leadership_onboarding_done = true\n      await refreshProfile();\n    } catch (err) {\n      console.error(\"[LeadershipOnboarding] Erro geral:\", err);\n    }\n\n    setIsSubmitting(false);\n    onComplete();\n  };\n\n  const getSelectedConfig = (): CommunityConfig | undefined => {\n    return awaitingCommunities.find((c) => c.name === selectedCommunity);\n  };\n\n  if (!isOpen) return null;\n\n  return (\n    <AnimatePresence>\n      {isOpen && (\n        <motion.div\n          initial={{ opacity: 0 }}\n          animate={{ opacity: 1 }}\n          exit={{ opacity: 0 }}\n          className=\"fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4\"\n          onClick={onClose}\n        >\n          <motion.div\n            initial={{ opacity: 0, scale: 0.95, y: 20 }}\n            animate={{ opacity: 1, scale: 1, y: 0 }}\n            exit={{ opacity: 0, scale: 0.95, y: 20 }}\n            transition={{ duration: 0.3 }}\n            onClick={(e) => e.stopPropagation()}\n            className=\"relative w-full max-w-2xl bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden\"\n          >\n            {/* Header */}\n            <div className=\"bg-gradient-to-r from-[#35363A] to-[#1A1A1A] px-8 py-6 relative\">\n              <button\n                onClick={onClose}\n                className=\"absolute top-4 right-4 p-2 hover:bg-white/10 rounded-lg transition-colors\"\n              >\n                <X className=\"h-5 w-5 text-white/60\" />\n              </button>\n\n              <div className=\"flex items-center gap-3 mb-3\">\n                <div className=\"w-10 h-10 rounded-xl bg-[#C8102E]/20 flex items-center justify-center\">\n                  <Crown className=\"h-5 w-5 text-[#C8102E]\" />\n                </div>\n                <div>\n                  <h2 className=\"text-xl font-bold text-white\">\n                    {currentStep === 0\n                      ? \"Onboarding de Lideranca\"\n                      : currentStep === 1\n                      ? \"Escolha seu territorio\"\n                      : currentStep === 2\n                      ? \"Suas responsabilidades\"\n                      : \"Aceite de lideranca\"}\n                  </h2>\n                  <p className=\"text-white/50 text-sm\">\n                    Etapa {currentStep + 1} de {totalSteps}\n                  </p>\n                </div>\n              </div>\n\n              {/* Progress bar */}\n              <div className=\"h-1 bg-white/10 rounded-full overflow-hidden\">\n                <motion.div\n                  initial={{ width: 0 }}\n                  animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}\n                  transition={{ duration: 0.3 }}\n                  className=\"h-full bg-[#C8102E]\"\n                />\n              </div>\n            </div>\n\n            {/* Content */}\n            <div className=\"px-8 py-8 max-h-[60vh] overflow-y-auto\">\n              <AnimatePresence mode=\"wait\">\n\n                {/* ═══ ETAPA 1: Convocacao ═══ */}\n                {currentStep === 0 && (\n                  <motion.div\n                    key=\"step1\"\n                    initial={{ opacity: 0, x: 20 }}\n                    animate={{ opacity: 1, x: 0 }}\n                    exit={{ opacity: 0, x: -20 }}\n                    className=\"space-y-6\"\n                  >\n                    <div className=\"text-center\">\n                      <div className=\"w-16 h-16 rounded-2xl bg-[#C8102E]/10 border border-[#C8102E]/20 flex items-center justify-center mx-auto mb-4\">\n                        <Crown className=\"h-8 w-8 text-[#C8102E]\" />\n                      </div>\n                      <h3 className=\"text-2xl font-bold text-white mb-3\">\n                        Voce foi convocado(a) para liderar.\n                      </h3>\n                      <p className=\"text-white/60 max-w-md mx-auto leading-relaxed\">\n                        Lideranca aqui nao e cargo. Nao e titulo. E presenca.\n                      </p>\n                    </div>\n\n                    <div className=\"space-y-4\">\n                      <div className=\"bg-white/5 border border-white/10 rounded-xl p-5\">\n                        <h4 className=\"text-white font-semibold mb-2 flex items-center gap-2\">\n                          <Sparkles className=\"h-4 w-4 text-[#81D8D0]\" />\n                          O que um founder faz\n                        </h4>\n                        <ul className=\"space-y-2 text-white/60 text-sm\">\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#81D8D0] mt-1\">•</span>\n                            Cria e modera uma comunidade tematica\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#81D8D0] mt-1\">•</span>\n                            Escreve o manifesto — define a alma do espaco\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#81D8D0] mt-1\">•</span>\n                            Organiza rituais, lives e debates\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#81D8D0] mt-1\">•</span>\n                            Pode indicar alguem para co-moderar\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#81D8D0] mt-1\">•</span>\n                            Escala situacoes graves pra Mila (super_admin)\n                          </li>\n                        </ul>\n                      </div>\n\n                      <div className=\"bg-[#C8102E]/5 border border-[#C8102E]/20 rounded-xl p-5\">\n                        <h4 className=\"text-white font-semibold mb-2 flex items-center gap-2\">\n                          <AlertTriangle className=\"h-4 w-4 text-[#C8102E]\" />\n                          O que um founder NAO e\n                        </h4>\n                        <ul className=\"space-y-2 text-white/60 text-sm\">\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#C8102E] mt-1\">•</span>\n                            Nao e dono — e guardiao temporario\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#C8102E] mt-1\">•</span>\n                            Nao tem poder absoluto — a governanca e coletiva\n                          </li>\n                          <li className=\"flex items-start gap-2\">\n                            <span className=\"text-[#C8102E] mt-1\">•</span>\n                            Nao pode sumir — ausencia prolongada leva a revogacao\n                          </li>\n                        </ul>\n                      </div>\n                    </div>\n                  </motion.div>\n                )}\n\n                {/* ═══ ETAPA 2: Escolha de comunidade ═══ */}\n                {currentStep === 1 && (\n                  <motion.div\n                    key=\"step2\"\n                    initial={{ opacity: 0, x: 20 }}\n                    animate={{ opacity: 1, x: 0 }}\n                    exit={{ opacity: 0, x: -20 }}\n                    className=\"space-y-6\"\n                  >\n                    <div>\n                      <h3 className=\"text-xl font-bold text-white mb-2\">\n                        Escolha seu territorio\n                      </h3>\n                      <p className=\"text-white/50 text-sm\">\n                        Escolha uma das comunidades que aguardam um(a) fundador(a), ou proponha a criacao de uma nova.\n                      </p>\n                    </div>\n\n                    {/* Toggle: existente vs criar */}\n                    <div className=\"flex gap-3\">\n                      <button\n                        onClick={() => { setChoiceType(\"existing\"); setNewCommunityName(\"\"); setNewCommunityDesc(\"\"); }}\n                        className={`flex-1 py-3 px-4 rounded-xl border text-sm font-semibold transition-all ${\n                          choiceType === \"existing\"\n                            ? \"bg-[#81D8D0]/10 border-[#81D8D0]/40 text-[#81D8D0]\"\n                            : \"bg-white/5 border-white/10 text-white/50 hover:border-white/20\"\n                        }`}\n                      >\n                        <Users className=\"h-4 w-4 inline mr-2\" />\n                        Escolher existente\n                      </button>\n                      <button\n                        onClick={() => { setChoiceType(\"create\"); setSelectedCommunity(null); }}\n                        className={`flex-1 py-3 px-4 rounded-xl border text-sm font-semibold transition-all ${\n                          choiceType === \"create\"\n                            ? \"bg-[#C8102E]/10 border-[#C8102E]/40 text-[#C8102E]\"\n                            : \"bg-white/5 border-white/10 text-white/50 hover:border-white/20\"\n                        }`}\n                      >\n                        <Plus className=\"h-4 w-4 inline mr-2\" />\n                        Criar nova\n                      </button>\n                    </div>\n\n                    {/* Lista de comunidades awaiting_founder */}\n                    {choiceType === \"existing\" && (\n                      <div className=\"space-y-2 max-h-[40vh] overflow-y-auto pr-1\">\n                        {awaitingCommunities.map((c) => {\n                          const isSelected = selectedCommunity === c.name;\n                          const IconComp = c.icon;\n                          return (\n                            <button\n                              key={c.name}\n                              onClick={() => setSelectedCommunity(c.name)}\n                              className={`w-full text-left p-4 rounded-xl border transition-all ${\n                                isSelected\n                                  ? \"border-[#81D8D0]/50 bg-[#81D8D0]/5\"\n                                  : \"border-white/10 bg-white/3 hover:border-white/20\"\n                              }`}\n                            >\n                              <div className=\"flex items-start gap-3\">\n                                <div\n                                  className=\"w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0\"\n                                  style={{ background: `${c.color}20` }}\n                                >\n                                  <IconComp className=\"w-5 h-5\" style={{ color: c.color }} />\n                                </div>\n                                <div className=\"flex-1 min-w-0\">\n                                  <div className=\"flex items-center justify-between\">\n                                    <h4 className=\"text-white font-semibold text-sm\">{c.name}</h4>\n                                    {isSelected && (\n                                      <CheckCircle className=\"h-5 w-5 text-[#81D8D0] flex-shrink-0\" />\n                                    )}\n                                  </div>\n                                  <p className=\"text-white/40 text-xs mt-1 leading-relaxed\">\n                                    {c.description}\n                                  </p>\n                                  <span\n                                    className=\"inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full\"\n                                    style={{\n                                      background: `${c.color}15`,\n                                      color: c.color,\n                                    }}\n                                  >\n                                    {c.category}\n                                  </span>\n                                </div>\n                              </div>\n                            </button>\n                          );\n                        })}\n                      </div>\n                    )}\n\n                    {/* Criar nova comunidade */}\n                    {choiceType === \"create\" && (\n                      <div className=\"space-y-4\">\n                        <div>\n                          <label className=\"block text-sm font-medium text-white/70 mb-2\">\n                            Nome da comunidade\n                          </label>\n                          <input\n                            type=\"text\"\n                            value={newCommunityName}\n                            onChange={(e) => setNewCommunityName(e.target.value)}\n                            placeholder=\"Ex: Mentes Criativas\"\n                            maxLength={60}\n                            className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 transition-all\"\n                          />\n                          {newCommunityName.length > 0 && newCommunityName.trim().length < 3 && (\n                            <p className=\"text-xs text-[#C8102E] mt-1\">Minimo 3 caracteres</p>\n                          )}\n                        </div>\n                        <div>\n                          <label className=\"block text-sm font-medium text-white/70 mb-2\">\n                            Descricao curta\n                          </label>\n                          <textarea\n                            value={newCommunityDesc}\n                            onChange={(e) => setNewCommunityDesc(e.target.value)}\n                            placeholder=\"Sobre o que e essa comunidade? Qual a proposta?\"\n                            rows={3}\n                            maxLength={300}\n                            className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 resize-none transition-all\"\n                          />\n                          <p className=\"text-xs text-white/30 mt-1\">\n                            {newCommunityDesc.length}/300\n                            {newCommunityDesc.length > 0 && newCommunityDesc.trim().length < 10 && (\n                              <span className=\"text-[#C8102E] ml-2\">Minimo 10 caracteres</span>\n                            )}\n                          </p>\n                        </div>\n                        <div className=\"bg-white/5 border border-white/10 rounded-xl p-4\">\n                          <p className=\"text-white/50 text-xs leading-relaxed\">\n                            <AlertTriangle className=\"h-3 w-3 inline text-amber-400 mr-1\" />\n                            A proposta sera analisada pela Mila antes da criacao. Voce recebera uma resposta na Caixa de Entrada.\n                          </p>\n                        </div>\n                      </div>\n                    )}\n                  </motion.div>\n                )}\n\n                {/* ═══ ETAPA 3: Responsabilidades ═══ */}\n                {currentStep === 2 && (\n                  <motion.div\n                    key=\"step3\"\n                    initial={{ opacity: 0, x: 20 }}\n                    animate={{ opacity: 1, x: 0 }}\n                    exit={{ opacity: 0, x: -20 }}\n                    className=\"space-y-6\"\n                  >\n                    <div>\n                      <h3 className=\"text-xl font-bold text-white mb-2\">\n                        Aceite cada responsabilidade\n                      </h3>\n                      <p className=\"text-white/50 text-sm\">\n                        Marque TODAS. Se voce nao concorda com alguma, este papel nao e pra voce — e tudo bem.\n                      </p>\n                    </div>\n\n                    <div className=\"space-y-3\">\n                      {RESPONSIBILITIES.map((r) => {\n                        const isAccepted = acceptedResponsibilities.has(r.key);\n                        const IconComp = r.icon;\n                        return (\n                          <button\n                            key={r.key}\n                            onClick={() => toggleResponsibility(r.key)}\n                            className={`w-full text-left p-4 rounded-xl border transition-all ${\n                              isAccepted\n                                ? \"border-[#81D8D0]/40 bg-[#81D8D0]/5\"\n                                : \"border-white/10 bg-white/3 hover:border-white/20\"\n                            }`}\n                          >\n                            <div className=\"flex items-start gap-3\">\n                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${\n                                isAccepted ? \"bg-[#81D8D0]/20\" : \"bg-white/10\"\n                              }`}>\n                                {isAccepted ? (\n                                  <CheckCircle className=\"w-4 h-4 text-[#81D8D0]\" />\n                                ) : (\n                                  <IconComp className=\"w-4 h-4 text-white/40\" />\n                                )}\n                              </div>\n                              <div>\n                                <h4 className={`text-sm font-semibold transition-colors ${\n                                  isAccepted ? \"text-[#81D8D0]\" : \"text-white\"\n                                }`}>\n                                  {r.title}\n                                </h4>\n                                <p className=\"text-white/40 text-xs mt-0.5 leading-relaxed\">\n                                  {r.desc}\n                                </p>\n                              </div>\n                            </div>\n                          </button>\n                        );\n                      })}\n                    </div>\n\n                    {/* Contador */}\n                    <div className=\"text-center\">\n                      <p className=\"text-sm text-white/40\">\n                        <span className={`font-bold ${\n                          acceptedResponsibilities.size === RESPONSIBILITIES.length\n                            ? \"text-[#81D8D0]\"\n                            : \"text-white\"\n                        }`}>\n                          {acceptedResponsibilities.size}\n                        </span>\n                        /{RESPONSIBILITIES.length} aceitas\n                      </p>\n                    </div>\n                  </motion.div>\n                )}\n\n                {/* ═══ ETAPA 4: Aceite final + co-moderador ═══ */}\n                {currentStep === 3 && (\n                  <motion.div\n                    key=\"step4\"\n                    initial={{ opacity: 0, x: 20 }}\n                    animate={{ opacity: 1, x: 0 }}\n                    exit={{ opacity: 0, x: -20 }}\n                    className=\"space-y-6\"\n                  >\n                    <div>\n                      <h3 className=\"text-xl font-bold text-white mb-2\">\n                        Confirmacao final\n                      </h3>\n                      <p className=\"text-white/50 text-sm\">\n                        Revise e confirme. Depois disso, voce e oficialmente um(a) founder.\n                      </p>\n                    </div>\n\n                    {/* Resumo */}\n                    <div className=\"bg-white/5 border border-white/10 rounded-xl p-5 space-y-3\">\n                      <h4 className=\"text-white font-semibold text-sm flex items-center gap-2\">\n                        <Crown className=\"h-4 w-4 text-[#C8102E]\" />\n                        Resumo do onboarding\n                      </h4>\n                      <div className=\"text-sm text-white/60 space-y-1.5\">\n                        <p>\n                          <span className=\"text-white/40\">Comunidade:</span>{\" \"}\n                          {choiceType === \"existing\" ? (\n                            <span className=\"text-[#81D8D0] font-medium\">{selectedCommunity}</span>\n                          ) : (\n                            <span className=\"text-[#C8102E] font-medium\">\n                              Nova: \"{newCommunityName.trim()}\" (pendente de aprovacao)\n                            </span>\n                          )}\n                        </p>\n                        <p>\n                          <span className=\"text-white/40\">Responsabilidades:</span>{\" \"}\n                          <span className=\"text-[#81D8D0]\">{RESPONSIBILITIES.length}/{RESPONSIBILITIES.length} aceitas</span>\n                        </p>\n                      </div>\n                    </div>\n\n                    {/* Co-moderador (opcional) */}\n                    <div>\n                      <label className=\"block text-sm font-medium text-white/70 mb-2\">\n                        Indicar co-moderador(a)\n                        <span className=\"text-white/30 font-normal ml-1\">(opcional)</span>\n                      </label>\n                      <input\n                        type=\"text\"\n                        value={coModeratorName}\n                        onChange={(e) => setCoModeratorName(e.target.value)}\n                        placeholder=\"Nome ou apelido da pessoa que vai te ajudar\"\n                        maxLength={100}\n                        className=\"w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 transition-all\"\n                      />\n                      <p className=\"text-xs text-white/30 mt-1\">\n                        A pessoa sera contatada pela Mila para confirmar.\n                      </p>\n                    </div>\n\n                    {/* Aceite formal */}\n                    <div className=\"bg-[#C8102E]/5 border border-[#C8102E]/20 rounded-xl p-5\">\n                      <div className=\"flex items-start gap-3\">\n                        <input\n                          type=\"checkbox\"\n                          id=\"leadership-accept\"\n                          checked={leadershipAccepted}\n                          onChange={(e) => setLeadershipAccepted(e.target.checked)}\n                          className=\"mt-1 h-5 w-5 rounded border-2 border-white/30 accent-[#C8102E] cursor-pointer flex-shrink-0\"\n                        />\n                        <label\n                          htmlFor=\"leadership-accept\"\n                          className=\"text-sm text-white/80 cursor-pointer leading-relaxed\"\n                        >\n                          <span className=\"font-bold text-white\">\n                            Aceito a convocacao de lideranca.\n                          </span>{\" \"}\n                          Compreendo que lideranca aqui e servico, nao poder. Me comprometo a moderar com\n                          presenca, criar o manifesto da comunidade, organizar rituais, e escalar situacoes\n                          graves. Entendo que ausencia prolongada ou abuso de poder resultam em revogacao.\n                        </label>\n                      </div>\n                    </div>\n                  </motion.div>\n                )}\n              </AnimatePresence>\n            </div>\n\n            {/* Footer */}\n            <div className=\"bg-white/3 px-8 py-5 flex items-center justify-between border-t border-white/10\">\n              {currentStep > 0 ? (\n                <button\n                  onClick={handleBack}\n                  disabled={isSubmitting}\n                  className=\"flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white/60 hover:bg-white/5 transition-all disabled:opacity-50\"\n                >\n                  <ArrowLeft className=\"h-5 w-5\" />\n                  Voltar\n                </button>\n              ) : (\n                <div />\n              )}\n\n              <button\n                onClick={handleNext}\n                disabled={!canProceed() || isSubmitting}\n                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${\n                  canProceed() && !isSubmitting\n                    ? \"bg-[#C8102E] text-white hover:bg-[#C8102E]/90 shadow-lg hover:shadow-xl\"\n                    : \"bg-white/10 text-white/30 cursor-not-allowed\"\n                }`}\n              >\n                {isSubmitting ? (\n                  <>\n                    <Loader2 className=\"h-5 w-5 animate-spin\" />\n                    Salvando...\n                  </>\n                ) : currentStep === totalSteps - 1 ? (\n                  <>\n                    Assumir lideranca\n                    <Crown className=\"h-5 w-5\" />\n                  </>\n                ) : (\n                  <>\n                    Continuar\n                    <ArrowRight className=\"h-5 w-5\" />\n                  </>\n                )}\n              </button>\n            </div>\n          </motion.div>\n        </motion.div>\n      )}\n    </AnimatePresence>\n  );\n}"
+/**
+ * LeadershipOnboardingModal — Fase 6: Onboarding de Lideranca
+ *
+ * Modal multi-step para founders/moderators:
+ *   Etapa 1: Convocacao — o que e lideranca aqui
+ *   Etapa 2: Escolha de comunidade (awaiting_founder) OU criar propria
+ *   Etapa 3: Responsabilidades — checklist de compromissos
+ *   Etapa 4: Aceite formal + indicacao de co-moderador
+ *
+ * No fim:
+ *   - Grava leadership_onboarding_done = true em public.users
+ *   - Grava dados em contact_requests com prefixo [LEADERSHIP_ONBOARDING]
+ *   - Atualiza owner_id da comunidade escolhida (se awaiting_founder)
+ */
+
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  X, ArrowRight, ArrowLeft, CheckCircle, Loader2, Crown,
+  Shield, Users, Flame, BookOpen, AlertTriangle, Plus,
+  Heart, Eye, Radio, Scale, Sparkles
+} from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useProfileContext } from "../../lib/ProfileContext";
+import { COMMUNITIES_CONFIG } from "../../lib/communitiesConfig";
+import type { CommunityConfig } from "../../lib/communitiesConfig";
+
+interface LeadershipOnboardingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+// Responsabilidades que o founder deve aceitar
+const RESPONSIBILITIES = [
+  {
+    key: "moderar",
+    icon: Shield,
+    title: "Moderar com presenca",
+    desc: "Manter o espaco seguro. Remover conteudo que viole os principios. Agir com firmeza e empatia.",
+  },
+  {
+    key: "rituais",
+    icon: Flame,
+    title: "Organizar rituais e encontros",
+    desc: "Criar rodas de escuta, debates, sessoes de foco. A comunidade so vive se voce convoca.",
+  },
+  {
+    key: "cultura",
+    icon: Heart,
+    title: "Proteger a cultura",
+    desc: "Definir manifesto, tom e limites. Voce e quem decide o que cabe e o que nao cabe.",
+  },
+  {
+    key: "escalar",
+    icon: AlertTriangle,
+    title: "Escalar quando necessario",
+    desc: "Situacoes graves vao direto pra Mila (super_admin). Voce nao carrega tudo sozinho(a).",
+  },
+  {
+    key: "presenca",
+    icon: Eye,
+    title: "Estar presente",
+    desc: "Lideranca aqui nao e cargo — e presenca. Se sumir, a comunidade morre.",
+  },
+  {
+    key: "manifesto",
+    icon: BookOpen,
+    title: "Criar o manifesto da comunidade",
+    desc: "Voce tem a obrigacao de escrever o manifesto. Ele define a alma do espaco.",
+  },
+];
+
+export function LeadershipOnboardingModal({
+  isOpen,
+  onClose,
+  onComplete,
+}: LeadershipOnboardingModalProps) {
+  const { user, refreshProfile } = useProfileContext();
+
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Step 2: Community choice
+  const [choiceType, setChoiceType] = useState<"existing" | "create" | null>(null);
+  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
+  const [newCommunityName, setNewCommunityName] = useState("");
+  const [newCommunityDesc, setNewCommunityDesc] = useState("");
+
+  // Step 3: Responsibilities
+  const [acceptedResponsibilities, setAcceptedResponsibilities] = useState<Set<string>>(new Set());
+
+  // Step 4: Final
+  const [coModeratorName, setCoModeratorName] = useState("");
+  const [leadershipAccepted, setLeadershipAccepted] = useState(false);
+
+  const totalSteps = 4;
+
+  // Comunidades awaiting_founder
+  const awaitingCommunities = COMMUNITIES_CONFIG.filter(
+    (c) => c.status === "awaiting_founder"
+  );
+
+  // Reset ao abrir
+  useEffect(() => {
+    if (!isOpen) return;
+    setCurrentStep(0);
+    setChoiceType(null);
+    setSelectedCommunity(null);
+    setNewCommunityName("");
+    setNewCommunityDesc("");
+    setAcceptedResponsibilities(new Set());
+    setCoModeratorName("");
+    setLeadershipAccepted(false);
+    setIsSubmitting(false);
+  }, [isOpen]);
+
+  const toggleResponsibility = (key: string) => {
+    setAcceptedResponsibilities((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case 0:
+        return true; // Step 1 is informational
+      case 1:
+        if (choiceType === "existing") return !!selectedCommunity;
+        if (choiceType === "create") return newCommunityName.trim().length >= 3 && newCommunityDesc.trim().length >= 10;
+        return false;
+      case 2:
+        return acceptedResponsibilities.size === RESPONSIBILITIES.length;
+      case 3:
+        return leadershipAccepted;
+      default:
+        return false;
+    }
+  };
+
+  const handleNext = () => {
+    if (currentStep < totalSteps - 1) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      handleFinalize();
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleFinalize = async () => {
+    if (!user?.id) return;
+    setIsSubmitting(true);
+
+    try {
+      // 1. Gravar leadership_onboarding_done = true
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ leadership_onboarding_done: true })
+        .eq("id", user.id);
+
+      if (updateError) {
+        console.error("[LeadershipOnboarding] Erro ao atualizar usuario:", updateError);
+      }
+
+      // 2. Se escolheu comunidade existente, TENTAR atualizar owner_id
+      // NOTA: RLS pode bloquear este UPDATE. Se falhar, a info fica salva
+      // no contact_requests e a Mila faz manualmente no Supabase Dashboard.
+      let communityInfo = "";
+      let ownerIdSet = false;
+      if (choiceType === "existing" && selectedCommunity) {
+        communityInfo = `Comunidade escolhida: ${selectedCommunity}`;
+
+        // Buscar o ID real da comunidade no banco
+        const { data: dbCommunity } = await supabase
+          .from("communities")
+          .select("id")
+          .eq("name", selectedCommunity)
+          .single();
+
+        if (dbCommunity?.id) {
+          const { data: updated, error: ownerError } = await supabase
+            .from("communities")
+            .update({ owner_id: user.id, needs_moderator: false })
+            .eq("id", dbCommunity.id)
+            .select("id")
+            .single();
+
+          if (ownerError || !updated) {
+            console.warn("[LeadershipOnboarding] owner_id nao atualizado (RLS provavel). Mila fara manualmente.", ownerError);
+            communityInfo += ` [ACAO NECESSARIA: setar owner_id = ${user.id} na comunidade "${selectedCommunity}" (id: ${dbCommunity.id})]`;
+          } else {
+            ownerIdSet = true;
+            console.log(`[LeadershipOnboarding] owner_id setado com sucesso para comunidade ${selectedCommunity}`);
+          }
+        }
+      } else if (choiceType === "create") {
+        communityInfo = `Nova comunidade proposta: "${newCommunityName.trim()}" — ${newCommunityDesc.trim()} [ACAO NECESSARIA: criar comunidade no banco]`;
+      }
+
+      // 3. Gravar dados do onboarding em contact_requests
+      // Este INSERT funciona via RLS (ja testado em ContactFounderModal, PulsoVivo, etc.)
+      const onboardingData = [
+        `[LEADERSHIP_ONBOARDING]`,
+        `Founder: ${user.display_name || user.name} (${user.id})`,
+        communityInfo,
+        ownerIdSet ? "owner_id: OK" : "owner_id: PENDENTE (Mila precisa setar)",
+        coModeratorName.trim()
+          ? `Co-moderador indicado: ${coModeratorName.trim()}`
+          : "Sem co-moderador indicado",
+        `Responsabilidades aceitas: ${RESPONSIBILITIES.map((r) => r.key).join(", ")}`,
+        `Data: ${new Date().toISOString()}`,
+      ].join(" | ");
+
+      const { error: contactError } = await supabase
+        .from("contact_requests")
+        .insert({
+          user_id: user.id,
+          reason: "other",
+          message: onboardingData,
+          status: "pending",
+        });
+
+      if (contactError) {
+        console.error("[LeadershipOnboarding] Erro ao salvar contact_request:", contactError);
+      }
+
+      // 4. Refresh profile para pegar leadership_onboarding_done = true
+      await refreshProfile();
+    } catch (err) {
+      console.error("[LeadershipOnboarding] Erro geral:", err);
+    }
+
+    setIsSubmitting(false);
+    onComplete();
+  };
+
+  const getSelectedConfig = (): CommunityConfig | undefined => {
+    return awaitingCommunities.find((c) => c.name === selectedCommunity);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.3 }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#35363A] to-[#1A1A1A] px-8 py-6 relative">
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-white/60" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-[#C8102E]/20 flex items-center justify-center">
+                  <Crown className="h-5 w-5 text-[#C8102E]" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    {currentStep === 0
+                      ? "Onboarding de Lideranca"
+                      : currentStep === 1
+                      ? "Escolha seu territorio"
+                      : currentStep === 2
+                      ? "Suas responsabilidades"
+                      : "Aceite de lideranca"}
+                  </h2>
+                  <p className="text-white/50 text-sm">
+                    Etapa {currentStep + 1} de {totalSteps}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full bg-[#C8102E]"
+                />
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-8 py-8 max-h-[60vh] overflow-y-auto">
+              <AnimatePresence mode="wait">
+
+                {/* ═══ ETAPA 1: Convocacao ═══ */}
+                {currentStep === 0 && (
+                  <motion.div
+                    key="step1"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div className="text-center">
+                      <div className="w-16 h-16 rounded-2xl bg-[#C8102E]/10 border border-[#C8102E]/20 flex items-center justify-center mx-auto mb-4">
+                        <Crown className="h-8 w-8 text-[#C8102E]" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-3">
+                        Voce foi convocado(a) para liderar.
+                      </h3>
+                      <p className="text-white/60 max-w-md mx-auto leading-relaxed">
+                        Lideranca aqui nao e cargo. Nao e titulo. E presenca.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                        <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-[#81D8D0]" />
+                          O que um founder faz
+                        </h4>
+                        <ul className="space-y-2 text-white/60 text-sm">
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#81D8D0] mt-1">•</span>
+                            Cria e modera uma comunidade tematica
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#81D8D0] mt-1">•</span>
+                            Escreve o manifesto — define a alma do espaco
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#81D8D0] mt-1">•</span>
+                            Organiza rituais, lives e debates
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#81D8D0] mt-1">•</span>
+                            Pode indicar alguem para co-moderar
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#81D8D0] mt-1">•</span>
+                            Escala situacoes graves pra Mila (super_admin)
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-[#C8102E]/5 border border-[#C8102E]/20 rounded-xl p-5">
+                        <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-[#C8102E]" />
+                          O que um founder NAO e
+                        </h4>
+                        <ul className="space-y-2 text-white/60 text-sm">
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#C8102E] mt-1">•</span>
+                            Nao e dono — e guardiao temporario
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#C8102E] mt-1">•</span>
+                            Nao tem poder absoluto — a governanca e coletiva
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-[#C8102E] mt-1">•</span>
+                            Nao pode sumir — ausencia prolongada leva a revogacao
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ═══ ETAPA 2: Escolha de comunidade ═══ */}
+                {currentStep === 1 && (
+                  <motion.div
+                    key="step2"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        Escolha seu territorio
+                      </h3>
+                      <p className="text-white/50 text-sm">
+                        Escolha uma das comunidades que aguardam um(a) fundador(a), ou proponha a criacao de uma nova.
+                      </p>
+                    </div>
+
+                    {/* Toggle: existente vs criar */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => { setChoiceType("existing"); setNewCommunityName(""); setNewCommunityDesc(""); }}
+                        className={`flex-1 py-3 px-4 rounded-xl border text-sm font-semibold transition-all ${
+                          choiceType === "existing"
+                            ? "bg-[#81D8D0]/10 border-[#81D8D0]/40 text-[#81D8D0]"
+                            : "bg-white/5 border-white/10 text-white/50 hover:border-white/20"
+                        }`}
+                      >
+                        <Users className="h-4 w-4 inline mr-2" />
+                        Escolher existente
+                      </button>
+                      <button
+                        onClick={() => { setChoiceType("create"); setSelectedCommunity(null); }}
+                        className={`flex-1 py-3 px-4 rounded-xl border text-sm font-semibold transition-all ${
+                          choiceType === "create"
+                            ? "bg-[#C8102E]/10 border-[#C8102E]/40 text-[#C8102E]"
+                            : "bg-white/5 border-white/10 text-white/50 hover:border-white/20"
+                        }`}
+                      >
+                        <Plus className="h-4 w-4 inline mr-2" />
+                        Criar nova
+                      </button>
+                    </div>
+
+                    {/* Lista de comunidades awaiting_founder */}
+                    {choiceType === "existing" && (
+                      <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                        {awaitingCommunities.map((c) => {
+                          const isSelected = selectedCommunity === c.name;
+                          const IconComp = c.icon;
+                          return (
+                            <button
+                              key={c.name}
+                              onClick={() => setSelectedCommunity(c.name)}
+                              className={`w-full text-left p-4 rounded-xl border transition-all ${
+                                isSelected
+                                  ? "border-[#81D8D0]/50 bg-[#81D8D0]/5"
+                                  : "border-white/10 bg-white/3 hover:border-white/20"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div
+                                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                                  style={{ background: `${c.color}20` }}
+                                >
+                                  <IconComp className="w-5 h-5" style={{ color: c.color }} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-white font-semibold text-sm">{c.name}</h4>
+                                    {isSelected && (
+                                      <CheckCircle className="h-5 w-5 text-[#81D8D0] flex-shrink-0" />
+                                    )}
+                                  </div>
+                                  <p className="text-white/40 text-xs mt-1 leading-relaxed">
+                                    {c.description}
+                                  </p>
+                                  <span
+                                    className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full"
+                                    style={{
+                                      background: `${c.color}15`,
+                                      color: c.color,
+                                    }}
+                                  >
+                                    {c.category}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Criar nova comunidade */}
+                    {choiceType === "create" && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-white/70 mb-2">
+                            Nome da comunidade
+                          </label>
+                          <input
+                            type="text"
+                            value={newCommunityName}
+                            onChange={(e) => setNewCommunityName(e.target.value)}
+                            placeholder="Ex: Mentes Criativas"
+                            maxLength={60}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 transition-all"
+                          />
+                          {newCommunityName.length > 0 && newCommunityName.trim().length < 3 && (
+                            <p className="text-xs text-[#C8102E] mt-1">Minimo 3 caracteres</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-white/70 mb-2">
+                            Descricao curta
+                          </label>
+                          <textarea
+                            value={newCommunityDesc}
+                            onChange={(e) => setNewCommunityDesc(e.target.value)}
+                            placeholder="Sobre o que e essa comunidade? Qual a proposta?"
+                            rows={3}
+                            maxLength={300}
+                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 resize-none transition-all"
+                          />
+                          <p className="text-xs text-white/30 mt-1">
+                            {newCommunityDesc.length}/300
+                            {newCommunityDesc.length > 0 && newCommunityDesc.trim().length < 10 && (
+                              <span className="text-[#C8102E] ml-2">Minimo 10 caracteres</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                          <p className="text-white/50 text-xs leading-relaxed">
+                            <AlertTriangle className="h-3 w-3 inline text-amber-400 mr-1" />
+                            A proposta sera analisada pela Mila antes da criacao. Voce recebera uma resposta na Caixa de Entrada.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* ═══ ETAPA 3: Responsabilidades ═══ */}
+                {currentStep === 2 && (
+                  <motion.div
+                    key="step3"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        Aceite cada responsabilidade
+                      </h3>
+                      <p className="text-white/50 text-sm">
+                        Marque TODAS. Se voce nao concorda com alguma, este papel nao e pra voce — e tudo bem.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {RESPONSIBILITIES.map((r) => {
+                        const isAccepted = acceptedResponsibilities.has(r.key);
+                        const IconComp = r.icon;
+                        return (
+                          <button
+                            key={r.key}
+                            onClick={() => toggleResponsibility(r.key)}
+                            className={`w-full text-left p-4 rounded-xl border transition-all ${
+                              isAccepted
+                                ? "border-[#81D8D0]/40 bg-[#81D8D0]/5"
+                                : "border-white/10 bg-white/3 hover:border-white/20"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                                isAccepted ? "bg-[#81D8D0]/20" : "bg-white/10"
+                              }`}>
+                                {isAccepted ? (
+                                  <CheckCircle className="w-4 h-4 text-[#81D8D0]" />
+                                ) : (
+                                  <IconComp className="w-4 h-4 text-white/40" />
+                                )}
+                              </div>
+                              <div>
+                                <h4 className={`text-sm font-semibold transition-colors ${
+                                  isAccepted ? "text-[#81D8D0]" : "text-white"
+                                }`}>
+                                  {r.title}
+                                </h4>
+                                <p className="text-white/40 text-xs mt-0.5 leading-relaxed">
+                                  {r.desc}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Contador */}
+                    <div className="text-center">
+                      <p className="text-sm text-white/40">
+                        <span className={`font-bold ${
+                          acceptedResponsibilities.size === RESPONSIBILITIES.length
+                            ? "text-[#81D8D0]"
+                            : "text-white"
+                        }`}>
+                          {acceptedResponsibilities.size}
+                        </span>
+                        /{RESPONSIBILITIES.length} aceitas
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ═══ ETAPA 4: Aceite final + co-moderador ═══ */}
+                {currentStep === 3 && (
+                  <motion.div
+                    key="step4"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        Confirmacao final
+                      </h3>
+                      <p className="text-white/50 text-sm">
+                        Revise e confirme. Depois disso, voce e oficialmente um(a) founder.
+                      </p>
+                    </div>
+
+                    {/* Resumo */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-3">
+                      <h4 className="text-white font-semibold text-sm flex items-center gap-2">
+                        <Crown className="h-4 w-4 text-[#C8102E]" />
+                        Resumo do onboarding
+                      </h4>
+                      <div className="text-sm text-white/60 space-y-1.5">
+                        <p>
+                          <span className="text-white/40">Comunidade:</span>{" "}
+                          {choiceType === "existing" ? (
+                            <span className="text-[#81D8D0] font-medium">{selectedCommunity}</span>
+                          ) : (
+                            <span className="text-[#C8102E] font-medium">
+                              Nova: "{newCommunityName.trim()}" (pendente de aprovacao)
+                            </span>
+                          )}
+                        </p>
+                        <p>
+                          <span className="text-white/40">Responsabilidades:</span>{" "}
+                          <span className="text-[#81D8D0]">{RESPONSIBILITIES.length}/{RESPONSIBILITIES.length} aceitas</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Co-moderador (opcional) */}
+                    <div>
+                      <label className="block text-sm font-medium text-white/70 mb-2">
+                        Indicar co-moderador(a)
+                        <span className="text-white/30 font-normal ml-1">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={coModeratorName}
+                        onChange={(e) => setCoModeratorName(e.target.value)}
+                        placeholder="Nome ou apelido da pessoa que vai te ajudar"
+                        maxLength={100}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#81D8D0]/50 transition-all"
+                      />
+                      <p className="text-xs text-white/30 mt-1">
+                        A pessoa sera contatada pela Mila para confirmar.
+                      </p>
+                    </div>
+
+                    {/* Aceite formal */}
+                    <div className="bg-[#C8102E]/5 border border-[#C8102E]/20 rounded-xl p-5">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="leadership-accept"
+                          checked={leadershipAccepted}
+                          onChange={(e) => setLeadershipAccepted(e.target.checked)}
+                          className="mt-1 h-5 w-5 rounded border-2 border-white/30 accent-[#C8102E] cursor-pointer flex-shrink-0"
+                        />
+                        <label
+                          htmlFor="leadership-accept"
+                          className="text-sm text-white/80 cursor-pointer leading-relaxed"
+                        >
+                          <span className="font-bold text-white">
+                            Aceito a convocacao de lideranca.
+                          </span>{" "}
+                          Compreendo que lideranca aqui e servico, nao poder. Me comprometo a moderar com
+                          presenca, criar o manifesto da comunidade, organizar rituais, e escalar situacoes
+                          graves. Entendo que ausencia prolongada ou abuso de poder resultam em revogacao.
+                        </label>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-white/3 px-8 py-5 flex items-center justify-between border-t border-white/10">
+              {currentStep > 0 ? (
+                <button
+                  onClick={handleBack}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white/60 hover:bg-white/5 transition-all disabled:opacity-50"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                  Voltar
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <button
+                onClick={handleNext}
+                disabled={!canProceed() || isSubmitting}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${
+                  canProceed() && !isSubmitting
+                    ? "bg-[#C8102E] text-white hover:bg-[#C8102E]/90 shadow-lg hover:shadow-xl"
+                    : "bg-white/10 text-white/30 cursor-not-allowed"
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Salvando...
+                  </>
+                ) : currentStep === totalSteps - 1 ? (
+                  <>
+                    Assumir lideranca
+                    <Crown className="h-5 w-5" />
+                  </>
+                ) : (
+                  <>
+                    Continuar
+                    <ArrowRight className="h-5 w-5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }

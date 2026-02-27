@@ -1,4 +1,4 @@
-// pull-code.mjs — Puxa arquivos do Supabase KV para o Codespace
+// pull-code.mjs — Puxa arquivos do Supabase KV (via base64) para o Codespace
 // Uso: node pull-code.mjs
 
 import fs from "fs";
@@ -9,13 +9,10 @@ const SERVER_BASE = `${SUPABASE_URL}/functions/v1/make-server-6c28e0e2`;
 const ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllaWVvaHRuYXlteWt4aXFubWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0OTQ1NzMsImV4cCI6MjA4NjA3MDU3M30.32LjQe1dQLGAfbyfK8KkjNlXOGkZGaWEgI20y3gl3Hc";
 
-const PREFIX = "code_deploy:";
-
 async function main() {
-  console.log("Conectando ao Supabase KV...");
-  console.log(`   Endpoint: ${SERVER_BASE}/deploy-list`);
+  console.log("Baixando arquivos via base64 (a prova de corrupcao)...\n");
 
-  const res = await fetch(`${SERVER_BASE}/deploy-list?prefix=${PREFIX}`, {
+  const res = await fetch(`${SERVER_BASE}/deploy-download?prefix=code_deploy:`, {
     headers: { Authorization: `Bearer ${ANON_KEY}` },
   });
 
@@ -33,32 +30,23 @@ async function main() {
 
   console.log(`Encontrados ${json.count} arquivos\n`);
 
-  if (json.count === 0) {
-    console.log("Nenhum arquivo com prefixo", PREFIX);
-    console.log("Rode o DeployBridge no Figma Make primeiro.");
-    process.exit(0);
-  }
-
   let ok = 0;
   let errs = 0;
 
   for (const file of json.files) {
     try {
-      const filePath = file.key.replace(PREFIX, "");
-      const content = typeof file.value === "string"
-        ? file.value
-        : JSON.stringify(file.value, null, 2);
+      const content = Buffer.from(file.base64, "base64").toString("utf-8");
 
-      const dir = path.dirname(filePath);
+      const dir = path.dirname(file.path);
       if (dir && dir !== ".") {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      fs.writeFileSync(filePath, content, "utf-8");
-      console.log(`  OK ${filePath}`);
+      fs.writeFileSync(file.path, content, "utf-8");
+      console.log(`  OK  ${file.path}`);
       ok++;
     } catch (err) {
-      console.error(`  ERRO ${file.key}: ${err.message}`);
+      console.error(`  ERRO ${file.path}: ${err.message}`);
       errs++;
     }
   }

@@ -1,7 +1,471 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/NucleosTerritoriais.tsx",
-  "created_at": "2026-02-27T05:36:13.737Z",
-  "file_content": "import { useState, useEffect } from \"react\";\nimport { motion } from \"motion/react\";\nimport { MapPin, User, Calendar, Search, Globe, Users } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\ninterface NucleoInfo {\n  id: string;\n  nome: string;\n  estado: string;\n  coordenador_nome: string | null;\n  procurando_coordenador: boolean;\n  proximo_evento: string | null;\n  status: string;\n  membros_count: number;\n  encontros_realizados: number;\n}\n\n// Nucleos planejados — usados como fallback se a tabela nuclei estiver vazia\n// Esses SAO os nucleos reais que a Mila planeja. Nao e dado ficticio.\nconst PLANNED_NUCLEOS: NucleoInfo[] = [\n  {\n    id: \"planned-sp\",\n    nome: \"Nucleo Sao Paulo\",\n    estado: \"SP\",\n    coordenador_nome: \"Mila\",\n    procurando_coordenador: false,\n    proximo_evento: \"Encontro Presencial — em organizacao\",\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n  {\n    id: \"planned-rs\",\n    nome: \"Nucleo Rio Grande do Sul\",\n    estado: \"RS\",\n    coordenador_nome: null,\n    procurando_coordenador: true,\n    proximo_evento: null,\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n  {\n    id: \"planned-sc\",\n    nome: \"Nucleo Santa Catarina\",\n    estado: \"SC\",\n    coordenador_nome: null,\n    procurando_coordenador: true,\n    proximo_evento: null,\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n  {\n    id: \"planned-mt\",\n    nome: \"Nucleo Mato Grosso\",\n    estado: \"MT\",\n    coordenador_nome: null,\n    procurando_coordenador: true,\n    proximo_evento: null,\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n  {\n    id: \"planned-go\",\n    nome: \"Nucleo Goias\",\n    estado: \"GO\",\n    coordenador_nome: null,\n    procurando_coordenador: true,\n    proximo_evento: null,\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n  {\n    id: \"planned-ne\",\n    nome: \"Nucleo Nordeste\",\n    estado: \"NE\",\n    coordenador_nome: null,\n    procurando_coordenador: true,\n    proximo_evento: null,\n    status: \"em_formacao\",\n    membros_count: 0,\n    encontros_realizados: 0,\n  },\n];\n\nconst STATUS_LABELS: Record<string, { label: string; color: string }> = {\n  em_formacao: { label: \"Em formação\", color: \"#FF6B35\" },\n  ativo: { label: \"Ativo\", color: \"#81D8D0\" },\n  consolidado: { label: \"Núcleo consolidado\", color: \"#FFD700\" },\n  pausado: { label: \"Pausado\", color: \"#C0C0C0\" },\n};\n\n// SVG simplified Brazil map with state positions\nconst STATE_POSITIONS: Record<string, { x: number; y: number }> = {\n  SP: { x: 58, y: 68 },\n  RS: { x: 52, y: 85 },\n  SC: { x: 58, y: 78 },\n  MT: { x: 45, y: 45 },\n  GO: { x: 55, y: 52 },\n  NE: { x: 78, y: 32 },\n};\n\nexport function NucleosTerritoriais() {\n  const [nucleos, setNucleos] = useState<NucleoInfo[]>(PLANNED_NUCLEOS);\n  const [hoveredState, setHoveredState] = useState<string | null>(null);\n  const [isFromDB, setIsFromDB] = useState(false);\n\n  // Dados do nucleo hover (para tooltip no mapa)\n  const hoveredNucleo = nucleos.find(n => n.estado === hoveredState);\n\n  useEffect(() => {\n    async function loadNucleos() {\n      try {\n        // 1. Carregar nucleos do banco\n        const { data, error } = await supabase\n          .from(\"nuclei\")\n          .select(\"*\")\n          .order(\"nome\", { ascending: true });\n\n        if (error || !data || data.length === 0) {\n          // Sem dados no banco — usar nucleos planejados\n          return;\n        }\n\n        // 2. Carregar nomes dos coordenadores (se houver coordenador_id)\n        const coordIds = data\n          .map((n: any) => n.coordenador_id || n.coordinator_id)\n          .filter(Boolean);\n\n        let coordMap: Record<string, string> = {};\n        if (coordIds.length > 0) {\n          const { data: coords } = await supabase\n            .from(\"users\")\n            .select(\"id, name, display_name\")\n            .in(\"id\", coordIds);\n          if (coords) {\n            coords.forEach((c: any) => { coordMap[c.id] = c.display_name || c.name; });\n          }\n        }\n\n        // 3. Carregar proximo evento por estado (events com location_type = presencial)\n        const estados = data.map((n: any) => n.estado).filter(Boolean);\n        let eventMap: Record<string, string> = {};\n        if (estados.length > 0) {\n          const { data: events } = await supabase\n            .from(\"events\")\n            .select(\"title, starts_at, description\")\n            .in(\"status\", [\"published\", \"live\"])\n            .gte(\"starts_at\", new Date().toISOString())\n            .order(\"starts_at\", { ascending: true })\n            .limit(20);\n\n          if (events) {\n            // Tentar associar eventos a estados pelo titulo ou descricao\n            for (const estado of estados) {\n              const match = events.find((e: any) =>\n                (e.title || \"\").toLowerCase().includes(estado.toLowerCase()) ||\n                (e.description || \"\").toLowerCase().includes(estado.toLowerCase())\n              );\n              if (match) {\n                const d = new Date(match.starts_at);\n                eventMap[estado] = `${match.title} — ${d.toLocaleDateString(\"pt-BR\", { day: \"2-digit\", month: \"short\" })}`;\n              }\n            }\n          }\n        }\n\n        // 4. Mapear dados do banco\n        const mapped: NucleoInfo[] = data.map((n: any) => {\n          const coordId = n.coordenador_id || n.coordinator_id;\n          return {\n            id: n.id,\n            nome: n.nome || n.name || \"Nucleo\",\n            estado: n.estado || n.state || \"\",\n            coordenador_nome: coordId ? (coordMap[coordId] || null) : (n.coordenador_nome || null),\n            procurando_coordenador: n.procurando_coordenador ?? !coordId,\n            proximo_evento: eventMap[n.estado || n.state || \"\"] || n.proximo_evento || null,\n            status: n.status || \"em_formacao\",\n            membros_count: n.membros_count || n.member_count || 0,\n            encontros_realizados: n.encontros_realizados || 0,\n          };\n        });\n\n        setNucleos(mapped);\n        setIsFromDB(true);\n      } catch (err) {\n        console.log(\"NucleosTerritoriais: usando dados planejados (fallback)\", err);\n        // Manter nucleos planejados\n      }\n    }\n    loadNucleos();\n  }, []);\n\n  return (\n    <section className=\"w-full py-16 md:py-24 lg:py-28 relative overflow-hidden\" style={{ background: \"#D4D4D4\" }}>\n      {/* Background */}\n      <div className=\"absolute inset-0 pointer-events-none opacity-[0.03]\">\n        <div className=\"absolute top-1/4 right-0 w-[400px] h-[400px] bg-[#FF6B35] rounded-full blur-3xl\" />\n      </div>\n\n      <div className=\"relative mx-auto max-w-[1200px] px-6 lg:px-8\">\n        {/* Header */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6 }}\n          className=\"text-center mb-14\"\n        >\n          <div className=\"inline-flex items-center gap-2 px-4 py-2 bg-[#FF6B35]/10 border border-[#FF6B35]/30 rounded-full mb-6\">\n            <Globe className=\"h-4 w-4 text-[#FF6B35]\" />\n            <span className=\"text-sm text-[#FF6B35] tracking-wide uppercase\" style={{ fontWeight: 600 }}>\n              Presença Territorial\n            </span>\n          </div>\n\n          <h2 className=\"text-3xl md:text-4xl lg:text-5xl mb-4 text-[#1A1A1A]\" style={{ fontWeight: 600 }}>\n            Núcleos por estado\n          </h2>\n          <p className=\"text-lg text-[#666] max-w-2xl mx-auto\">\n            Comunidades digitais com raízes presenciais. Cada núcleo organiza\n            lives territoriais, encontros e rituais locais.\n          </p>\n        </motion.div>\n\n        <div className=\"flex flex-col lg:flex-row gap-10 lg:gap-16 items-start\">\n          {/* Map visualization */}\n          <motion.div\n            initial={{ opacity: 0, x: -30 }}\n            whileInView={{ opacity: 1, x: 0 }}\n            viewport={{ once: true }}\n            transition={{ duration: 0.8 }}\n            className=\"w-full lg:w-5/12 flex-shrink-0\"\n          >\n            <div className=\"relative bg-white border border-black/10 rounded-2xl p-8 aspect-square flex items-center justify-center shadow-sm\">\n              {/* Tooltip do estado hover */}\n              {hoveredNucleo && (\n                <div className=\"absolute top-4 left-4 right-4 z-10 bg-white border border-black/10 rounded-xl p-3 shadow-lg\">\n                  <div className=\"flex items-center gap-2 mb-1\">\n                    <span className=\"text-sm font-semibold text-[#1A1A1A]\">{hoveredNucleo.nome}</span>\n                    <span\n                      className=\"text-[10px] px-2 py-0.5 rounded-full uppercase\"\n                      style={{\n                        backgroundColor: `${(STATUS_LABELS[hoveredNucleo.status]?.color || '#C0C0C0')}15`,\n                        color: STATUS_LABELS[hoveredNucleo.status]?.color || '#C0C0C0',\n                        fontWeight: 600,\n                      }}\n                    >\n                      {STATUS_LABELS[hoveredNucleo.status]?.label || hoveredNucleo.status}\n                    </span>\n                  </div>\n                  <div className=\"flex items-center gap-3 text-[11px] text-[#999]\">\n                    <span>{hoveredNucleo.membros_count} membros</span>\n                    <span>·</span>\n                    <span>{hoveredNucleo.encontros_realizados} encontros</span>\n                    {hoveredNucleo.proximo_evento && (\n                      <>\n                        <span>·</span>\n                        <span className=\"text-[#FF6B35] truncate\">{hoveredNucleo.proximo_evento}</span>\n                      </>\n                    )}\n                  </div>\n                </div>\n              )}\n              {/* Simplified Brazil shape */}\n              <svg viewBox=\"0 0 100 100\" className=\"w-full h-full max-w-[280px]\">\n                {/* Brazil outline - simplified */}\n                <path\n                  d=\"M 40 8 Q 55 5 75 15 Q 85 22 88 35 Q 90 45 82 50 Q 78 55 72 58 Q 68 62 65 70 Q 60 78 55 82 Q 48 90 42 92 Q 35 90 32 82 Q 28 72 30 65 Q 28 55 32 48 Q 30 40 35 30 Q 38 20 40 8 Z\"\n                  fill=\"none\"\n                  stroke=\"rgba(0,0,0,0.1)\"\n                  strokeWidth=\"0.5\"\n                />\n\n                {/* State dots */}\n                {nucleos.map((nucleo) => {\n                  const pos = STATE_POSITIONS[nucleo.estado];\n                  if (!pos) return null;\n                  const isHovered = hoveredState === nucleo.estado;\n                  const statusColor =\n                    STATUS_LABELS[nucleo.status]?.color || \"#C0C0C0\";\n\n                  return (\n                    <g key={nucleo.id}>\n                      {/* Pulse ring */}\n                      <motion.circle\n                        cx={pos.x}\n                        cy={pos.y}\n                        r={isHovered ? 6 : 4}\n                        fill=\"none\"\n                        stroke={statusColor}\n                        strokeWidth={0.5}\n                        animate={{\n                          r: isHovered ? [6, 10, 6] : [4, 7, 4],\n                          opacity: [0.5, 0, 0.5],\n                        }}\n                        transition={{\n                          duration: 2,\n                          repeat: Infinity,\n                          ease: \"easeInOut\",\n                        }}\n                      />\n                      {/* Dot */}\n                      <motion.circle\n                        cx={pos.x}\n                        cy={pos.y}\n                        r={isHovered ? 3 : 2}\n                        fill={statusColor}\n                        animate={{\n                          scale: isHovered ? 1.2 : 1,\n                        }}\n                        style={{ cursor: \"pointer\" }}\n                        onMouseEnter={() => setHoveredState(nucleo.estado)}\n                        onMouseLeave={() => setHoveredState(null)}\n                      />\n                      {/* Label */}\n                      <text\n                        x={pos.x}\n                        y={pos.y - 5}\n                        textAnchor=\"middle\"\n                        fill={isHovered ? \"#81D8D0\" : \"rgba(0,0,0,0.4)\"}\n                        fontSize=\"3\"\n                        fontWeight={isHovered ? 600 : 400}\n                      >\n                        {nucleo.estado}\n                      </text>\n                    </g>\n                  );\n                })}\n              </svg>\n            </div>\n          </motion.div>\n\n          {/* Nucleos list */}\n          <div className=\"w-full lg:w-7/12 space-y-3\">\n            {nucleos.map((nucleo, index) => {\n              const status = STATUS_LABELS[nucleo.status] || STATUS_LABELS[\"em_formacao\"];\n\n              return (\n                <motion.div\n                  key={nucleo.id}\n                  initial={{ opacity: 0, x: 20 }}\n                  whileInView={{ opacity: 1, x: 0 }}\n                  viewport={{ once: true }}\n                  transition={{ duration: 0.4, delay: index * 0.08 }}\n                  whileHover={{\n                    borderColor: `${status.color}40`,\n                    y: -2,\n                  }}\n                  onMouseEnter={() => setHoveredState(nucleo.estado)}\n                  onMouseLeave={() => setHoveredState(null)}\n                  className=\"group bg-white border border-black/10 rounded-xl p-5 transition-all duration-300 shadow-sm\"\n                >\n                  <div className=\"flex items-start justify-between mb-2\">\n                    <div className=\"flex items-center gap-3\">\n                      <div\n                        className=\"w-9 h-9 rounded-lg flex items-center justify-center\"\n                        style={{\n                          backgroundColor: `${status.color}15`,\n                          border: `1px solid ${status.color}30`,\n                        }}\n                      >\n                        <MapPin\n                          className=\"h-4 w-4\"\n                          style={{ color: status.color }}\n                        />\n                      </div>\n                      <div>\n                        <h3\n                          className=\"text-[#1A1A1A] group-hover:text-[#81D8D0] transition-colors\"\n                          style={{ fontWeight: 600 }}\n                        >\n                          {nucleo.nome}\n                        </h3>\n                        <span\n                          className=\"text-xs uppercase tracking-wider\"\n                          style={{\n                            color: status.color,\n                            fontWeight: 500,\n                          }}\n                        >\n                          {status.label}\n                        </span>\n                      </div>\n                    </div>\n                  </div>\n\n                  <div className=\"flex flex-wrap items-center gap-3 text-xs text-[#999] mt-3\">\n                    {/* Membros por estado */}\n                    {nucleo.membros_count > 0 && (\n                      <div className=\"flex items-center gap-1\">\n                        <Users className=\"h-3 w-3 text-[#81D8D0]\" />\n                        <span className=\"text-[#81D8D0]\" style={{ fontWeight: 500 }}>\n                          {nucleo.membros_count} {nucleo.membros_count === 1 ? \"membro\" : \"membros\"}\n                        </span>\n                      </div>\n                    )}\n\n                    {/* Encontros realizados */}\n                    {nucleo.encontros_realizados > 0 && (\n                      <div className=\"flex items-center gap-1\">\n                        <Calendar className=\"h-3 w-3 text-[#A855F7]\" />\n                        <span className=\"text-[#A855F7]\" style={{ fontWeight: 500 }}>\n                          {nucleo.encontros_realizados} {nucleo.encontros_realizados === 1 ? \"encontro\" : \"encontros\"}\n                        </span>\n                      </div>\n                    )}\n\n                    {nucleo.coordenador_nome ? (\n                      <div className=\"flex items-center gap-1\">\n                        <User className=\"h-3 w-3\" />\n                        <span>{nucleo.coordenador_nome}</span>\n                      </div>\n                    ) : nucleo.procurando_coordenador ? (\n                      <div className=\"flex items-center gap-1\">\n                        <Search className=\"h-3 w-3 text-[#FF6B35]\" />\n                        <span className=\"text-[#FF6B35]/80\" style={{ fontWeight: 500 }}>\n                          Procurando coordenador\n                        </span>\n                      </div>\n                    ) : null}\n\n                    {nucleo.proximo_evento && (\n                      <div className=\"flex items-center gap-1.5 px-2.5 py-1 bg-[#FF6B35]/10 border border-[#FF6B35]/20 rounded-full\">\n                        <Calendar className=\"h-3 w-3 text-[#FF6B35]\" />\n                        <span className=\"text-[#FF6B35]\" style={{ fontWeight: 600 }}>{nucleo.proximo_evento}</span>\n                      </div>\n                    )}\n                  </div>\n                </motion.div>\n              );\n            })}\n          </div>\n        </div>\n\n        {/* Regra de expansão */}\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n          transition={{ duration: 0.6, delay: 0.3 }}\n          className=\"max-w-2xl mx-auto mt-12 bg-white border border-black/10 rounded-xl p-6 text-center shadow-sm\"\n        >\n          <p className=\"text-[#666] text-sm mb-2\">\n            Subnúcleos por cidade só nascem com:\n          </p>\n          <div className=\"flex flex-wrap justify-center gap-4 text-xs text-[#999]\">\n            <span className=\"px-3 py-1 bg-[#C8C8C8] rounded-full\">\n              40+ membros ativos\n            </span>\n            <span className=\"px-3 py-1 bg-[#C8C8C8] rounded-full\">\n              2+ encontros realizados\n            </span>\n            <span className=\"px-3 py-1 bg-[#C8C8C8] rounded-full\">\n              15+ interessados na cidade\n            </span>\n            <span className=\"px-3 py-1 bg-[#C8C8C8] rounded-full\">\n              Coordenador definido\n            </span>\n          </div>\n          <p className=\"text-[#BBB] text-xs mt-3\">\n            Nada nasce vazio. Tudo nasce com intenção.\n          </p>\n        </motion.div>\n      </div>\n    </section>\n  );\n}"
+import { useState, useEffect } from "react";
+import { motion } from "motion/react";
+import { MapPin, User, Calendar, Search, Globe, Users } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+interface NucleoInfo {
+  id: string;
+  nome: string;
+  estado: string;
+  coordenador_nome: string | null;
+  procurando_coordenador: boolean;
+  proximo_evento: string | null;
+  status: string;
+  membros_count: number;
+  encontros_realizados: number;
+}
+
+// Nucleos planejados — usados como fallback se a tabela nuclei estiver vazia
+// Esses SAO os nucleos reais que a Mila planeja. Nao e dado ficticio.
+const PLANNED_NUCLEOS: NucleoInfo[] = [
+  {
+    id: "planned-sp",
+    nome: "Nucleo Sao Paulo",
+    estado: "SP",
+    coordenador_nome: "Mila",
+    procurando_coordenador: false,
+    proximo_evento: "Encontro Presencial — em organizacao",
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+  {
+    id: "planned-rs",
+    nome: "Nucleo Rio Grande do Sul",
+    estado: "RS",
+    coordenador_nome: null,
+    procurando_coordenador: true,
+    proximo_evento: null,
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+  {
+    id: "planned-sc",
+    nome: "Nucleo Santa Catarina",
+    estado: "SC",
+    coordenador_nome: null,
+    procurando_coordenador: true,
+    proximo_evento: null,
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+  {
+    id: "planned-mt",
+    nome: "Nucleo Mato Grosso",
+    estado: "MT",
+    coordenador_nome: null,
+    procurando_coordenador: true,
+    proximo_evento: null,
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+  {
+    id: "planned-go",
+    nome: "Nucleo Goias",
+    estado: "GO",
+    coordenador_nome: null,
+    procurando_coordenador: true,
+    proximo_evento: null,
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+  {
+    id: "planned-ne",
+    nome: "Nucleo Nordeste",
+    estado: "NE",
+    coordenador_nome: null,
+    procurando_coordenador: true,
+    proximo_evento: null,
+    status: "em_formacao",
+    membros_count: 0,
+    encontros_realizados: 0,
+  },
+];
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  em_formacao: { label: "Em formação", color: "#FF6B35" },
+  ativo: { label: "Ativo", color: "#81D8D0" },
+  consolidado: { label: "Núcleo consolidado", color: "#FFD700" },
+  pausado: { label: "Pausado", color: "#C0C0C0" },
+};
+
+// SVG simplified Brazil map with state positions
+const STATE_POSITIONS: Record<string, { x: number; y: number }> = {
+  SP: { x: 58, y: 68 },
+  RS: { x: 52, y: 85 },
+  SC: { x: 58, y: 78 },
+  MT: { x: 45, y: 45 },
+  GO: { x: 55, y: 52 },
+  NE: { x: 78, y: 32 },
+};
+
+export function NucleosTerritoriais() {
+  const [nucleos, setNucleos] = useState<NucleoInfo[]>(PLANNED_NUCLEOS);
+  const [hoveredState, setHoveredState] = useState<string | null>(null);
+  const [isFromDB, setIsFromDB] = useState(false);
+
+  // Dados do nucleo hover (para tooltip no mapa)
+  const hoveredNucleo = nucleos.find(n => n.estado === hoveredState);
+
+  useEffect(() => {
+    async function loadNucleos() {
+      try {
+        // 1. Carregar nucleos do banco
+        const { data, error } = await supabase
+          .from("nuclei")
+          .select("*")
+          .order("nome", { ascending: true });
+
+        if (error || !data || data.length === 0) {
+          // Sem dados no banco — usar nucleos planejados
+          return;
+        }
+
+        // 2. Carregar nomes dos coordenadores (se houver coordenador_id)
+        const coordIds = data
+          .map((n: any) => n.coordenador_id || n.coordinator_id)
+          .filter(Boolean);
+
+        let coordMap: Record<string, string> = {};
+        if (coordIds.length > 0) {
+          const { data: coords } = await supabase
+            .from("users")
+            .select("id, name, display_name")
+            .in("id", coordIds);
+          if (coords) {
+            coords.forEach((c: any) => { coordMap[c.id] = c.display_name || c.name; });
+          }
+        }
+
+        // 3. Carregar proximo evento por estado (events com location_type = presencial)
+        const estados = data.map((n: any) => n.estado).filter(Boolean);
+        let eventMap: Record<string, string> = {};
+        if (estados.length > 0) {
+          const { data: events } = await supabase
+            .from("events")
+            .select("title, starts_at, description")
+            .in("status", ["published", "live"])
+            .gte("starts_at", new Date().toISOString())
+            .order("starts_at", { ascending: true })
+            .limit(20);
+
+          if (events) {
+            // Tentar associar eventos a estados pelo titulo ou descricao
+            for (const estado of estados) {
+              const match = events.find((e: any) =>
+                (e.title || "").toLowerCase().includes(estado.toLowerCase()) ||
+                (e.description || "").toLowerCase().includes(estado.toLowerCase())
+              );
+              if (match) {
+                const d = new Date(match.starts_at);
+                eventMap[estado] = `${match.title} — ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+              }
+            }
+          }
+        }
+
+        // 4. Mapear dados do banco
+        const mapped: NucleoInfo[] = data.map((n: any) => {
+          const coordId = n.coordenador_id || n.coordinator_id;
+          return {
+            id: n.id,
+            nome: n.nome || n.name || "Nucleo",
+            estado: n.estado || n.state || "",
+            coordenador_nome: coordId ? (coordMap[coordId] || null) : (n.coordenador_nome || null),
+            procurando_coordenador: n.procurando_coordenador ?? !coordId,
+            proximo_evento: eventMap[n.estado || n.state || ""] || n.proximo_evento || null,
+            status: n.status || "em_formacao",
+            membros_count: n.membros_count || n.member_count || 0,
+            encontros_realizados: n.encontros_realizados || 0,
+          };
+        });
+
+        setNucleos(mapped);
+        setIsFromDB(true);
+      } catch (err) {
+        console.log("NucleosTerritoriais: usando dados planejados (fallback)", err);
+        // Manter nucleos planejados
+      }
+    }
+    loadNucleos();
+  }, []);
+
+  return (
+    <section className="w-full py-16 md:py-24 lg:py-28 relative overflow-hidden" style={{ background: "#D4D4D4" }}>
+      {/* Background */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
+        <div className="absolute top-1/4 right-0 w-[400px] h-[400px] bg-[#FF6B35] rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative mx-auto max-w-[1200px] px-6 lg:px-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-14"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#FF6B35]/10 border border-[#FF6B35]/30 rounded-full mb-6">
+            <Globe className="h-4 w-4 text-[#FF6B35]" />
+            <span className="text-sm text-[#FF6B35] tracking-wide uppercase" style={{ fontWeight: 600 }}>
+              Presença Territorial
+            </span>
+          </div>
+
+          <h2 className="text-3xl md:text-4xl lg:text-5xl mb-4 text-[#1A1A1A]" style={{ fontWeight: 600 }}>
+            Núcleos por estado
+          </h2>
+          <p className="text-lg text-[#666] max-w-2xl mx-auto">
+            Comunidades digitais com raízes presenciais. Cada núcleo organiza
+            lives territoriais, encontros e rituais locais.
+          </p>
+        </motion.div>
+
+        <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
+          {/* Map visualization */}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="w-full lg:w-5/12 flex-shrink-0"
+          >
+            <div className="relative bg-white border border-black/10 rounded-2xl p-8 aspect-square flex items-center justify-center shadow-sm">
+              {/* Tooltip do estado hover */}
+              {hoveredNucleo && (
+                <div className="absolute top-4 left-4 right-4 z-10 bg-white border border-black/10 rounded-xl p-3 shadow-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-[#1A1A1A]">{hoveredNucleo.nome}</span>
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-full uppercase"
+                      style={{
+                        backgroundColor: `${(STATUS_LABELS[hoveredNucleo.status]?.color || '#C0C0C0')}15`,
+                        color: STATUS_LABELS[hoveredNucleo.status]?.color || '#C0C0C0',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {STATUS_LABELS[hoveredNucleo.status]?.label || hoveredNucleo.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-[#999]">
+                    <span>{hoveredNucleo.membros_count} membros</span>
+                    <span>·</span>
+                    <span>{hoveredNucleo.encontros_realizados} encontros</span>
+                    {hoveredNucleo.proximo_evento && (
+                      <>
+                        <span>·</span>
+                        <span className="text-[#FF6B35] truncate">{hoveredNucleo.proximo_evento}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Simplified Brazil shape */}
+              <svg viewBox="0 0 100 100" className="w-full h-full max-w-[280px]">
+                {/* Brazil outline - simplified */}
+                <path
+                  d="M 40 8 Q 55 5 75 15 Q 85 22 88 35 Q 90 45 82 50 Q 78 55 72 58 Q 68 62 65 70 Q 60 78 55 82 Q 48 90 42 92 Q 35 90 32 82 Q 28 72 30 65 Q 28 55 32 48 Q 30 40 35 30 Q 38 20 40 8 Z"
+                  fill="none"
+                  stroke="rgba(0,0,0,0.1)"
+                  strokeWidth="0.5"
+                />
+
+                {/* State dots */}
+                {nucleos.map((nucleo) => {
+                  const pos = STATE_POSITIONS[nucleo.estado];
+                  if (!pos) return null;
+                  const isHovered = hoveredState === nucleo.estado;
+                  const statusColor =
+                    STATUS_LABELS[nucleo.status]?.color || "#C0C0C0";
+
+                  return (
+                    <g key={nucleo.id}>
+                      {/* Pulse ring */}
+                      <motion.circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={isHovered ? 6 : 4}
+                        fill="none"
+                        stroke={statusColor}
+                        strokeWidth={0.5}
+                        animate={{
+                          r: isHovered ? [6, 10, 6] : [4, 7, 4],
+                          opacity: [0.5, 0, 0.5],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                      {/* Dot */}
+                      <motion.circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={isHovered ? 3 : 2}
+                        fill={statusColor}
+                        animate={{
+                          scale: isHovered ? 1.2 : 1,
+                        }}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={() => setHoveredState(nucleo.estado)}
+                        onMouseLeave={() => setHoveredState(null)}
+                      />
+                      {/* Label */}
+                      <text
+                        x={pos.x}
+                        y={pos.y - 5}
+                        textAnchor="middle"
+                        fill={isHovered ? "#81D8D0" : "rgba(0,0,0,0.4)"}
+                        fontSize="3"
+                        fontWeight={isHovered ? 600 : 400}
+                      >
+                        {nucleo.estado}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </motion.div>
+
+          {/* Nucleos list */}
+          <div className="w-full lg:w-7/12 space-y-3">
+            {nucleos.map((nucleo, index) => {
+              const status = STATUS_LABELS[nucleo.status] || STATUS_LABELS["em_formacao"];
+
+              return (
+                <motion.div
+                  key={nucleo.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.08 }}
+                  whileHover={{
+                    borderColor: `${status.color}40`,
+                    y: -2,
+                  }}
+                  onMouseEnter={() => setHoveredState(nucleo.estado)}
+                  onMouseLeave={() => setHoveredState(null)}
+                  className="group bg-white border border-black/10 rounded-xl p-5 transition-all duration-300 shadow-sm"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center"
+                        style={{
+                          backgroundColor: `${status.color}15`,
+                          border: `1px solid ${status.color}30`,
+                        }}
+                      >
+                        <MapPin
+                          className="h-4 w-4"
+                          style={{ color: status.color }}
+                        />
+                      </div>
+                      <div>
+                        <h3
+                          className="text-[#1A1A1A] group-hover:text-[#81D8D0] transition-colors"
+                          style={{ fontWeight: 600 }}
+                        >
+                          {nucleo.nome}
+                        </h3>
+                        <span
+                          className="text-xs uppercase tracking-wider"
+                          style={{
+                            color: status.color,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-[#999] mt-3">
+                    {/* Membros por estado */}
+                    {nucleo.membros_count > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Users className="h-3 w-3 text-[#81D8D0]" />
+                        <span className="text-[#81D8D0]" style={{ fontWeight: 500 }}>
+                          {nucleo.membros_count} {nucleo.membros_count === 1 ? "membro" : "membros"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Encontros realizados */}
+                    {nucleo.encontros_realizados > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-[#A855F7]" />
+                        <span className="text-[#A855F7]" style={{ fontWeight: 500 }}>
+                          {nucleo.encontros_realizados} {nucleo.encontros_realizados === 1 ? "encontro" : "encontros"}
+                        </span>
+                      </div>
+                    )}
+
+                    {nucleo.coordenador_nome ? (
+                      <div className="flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        <span>{nucleo.coordenador_nome}</span>
+                      </div>
+                    ) : nucleo.procurando_coordenador ? (
+                      <div className="flex items-center gap-1">
+                        <Search className="h-3 w-3 text-[#FF6B35]" />
+                        <span className="text-[#FF6B35]/80" style={{ fontWeight: 500 }}>
+                          Procurando coordenador
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {nucleo.proximo_evento && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FF6B35]/10 border border-[#FF6B35]/20 rounded-full">
+                        <Calendar className="h-3 w-3 text-[#FF6B35]" />
+                        <span className="text-[#FF6B35]" style={{ fontWeight: 600 }}>{nucleo.proximo_evento}</span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Regra de expansão */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="max-w-2xl mx-auto mt-12 bg-white border border-black/10 rounded-xl p-6 text-center shadow-sm"
+        >
+          <p className="text-[#666] text-sm mb-2">
+            Subnúcleos por cidade só nascem com:
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 text-xs text-[#999]">
+            <span className="px-3 py-1 bg-[#C8C8C8] rounded-full">
+              40+ membros ativos
+            </span>
+            <span className="px-3 py-1 bg-[#C8C8C8] rounded-full">
+              2+ encontros realizados
+            </span>
+            <span className="px-3 py-1 bg-[#C8C8C8] rounded-full">
+              15+ interessados na cidade
+            </span>
+            <span className="px-3 py-1 bg-[#C8C8C8] rounded-full">
+              Coordenador definido
+            </span>
+          </div>
+          <p className="text-[#BBB] text-xs mt-3">
+            Nada nasce vazio. Tudo nasce com intenção.
+          </p>
+        </motion.div>
+      </div>
+    </section>
+  );
 }

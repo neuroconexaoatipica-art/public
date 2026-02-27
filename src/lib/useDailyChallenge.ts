@@ -1,7 +1,155 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useDailyChallenge.ts",
-  "created_at": "2026-02-27T05:36:04.925Z",
-  "file_content": "/**\n * useDailyChallenge — Hook para desafios diarios (Rituais do Dia)\n * v2.0: Alinhado com DailyRitualModal + fallback sem desafio\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\n\nexport interface DailyChallenge {\n  id: string;\n  challenge_date: string;\n  title: string;\n  description: string;\n  challenge_type: string;\n  is_active: boolean;\n  response_count: number;\n}\n\nexport interface DailyCheckin {\n  id: string;\n  user_id: string;\n  checkin_date: string;\n  response: string | null;\n  challenge_id: string | null;\n  streak_count: number;\n}\n\nexport function useDailyChallenge() {\n  const [todayChallenge, setTodayChallenge] = useState<DailyChallenge | null>(null);\n  const [todayCheckin, setTodayCheckin] = useState<DailyCheckin | null>(null);\n  const [streak, setStreak] = useState(0);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const load = useCallback(async () => {\n    try {\n      const today = new Date().toISOString().split('T')[0];\n\n      // Buscar desafio de hoje\n      const { data: challenge } = await supabase\n        .from('daily_challenges')\n        .select('*')\n        .eq('challenge_date', today)\n        .eq('is_active', true)\n        .maybeSingle();\n\n      setTodayChallenge(challenge || null);\n\n      // Verificar se usuario ja fez checkin hoje\n      const { data: { user } } = await supabase.auth.getUser();\n      if (user) {\n        const { data: checkin } = await supabase\n          .from('daily_checkins')\n          .select('*')\n          .eq('user_id', user.id)\n          .eq('checkin_date', today)\n          .maybeSingle();\n\n        setTodayCheckin(checkin || null);\n\n        // Calcular streak — contar dias consecutivos com checkin\n        try {\n          const { data: streakData } = await supabase.rpc('get_user_streak', { target_user_id: user.id });\n          setStreak(streakData || 0);\n        } catch {\n          // Se a funcao RPC nao existir, calcular localmente\n          const { data: recentCheckins } = await supabase\n            .from('daily_checkins')\n            .select('checkin_date')\n            .eq('user_id', user.id)\n            .order('checkin_date', { ascending: false })\n            .limit(60);\n\n          if (recentCheckins && recentCheckins.length > 0) {\n            let count = 0;\n            const now = new Date();\n            for (let i = 0; i < 60; i++) {\n              const checkDate = new Date(now);\n              checkDate.setDate(checkDate.getDate() - i);\n              const dateStr = checkDate.toISOString().split('T')[0];\n              if (recentCheckins.some(c => c.checkin_date === dateStr)) {\n                count++;\n              } else if (i > 0) {\n                break; // Quebrou a sequencia\n              }\n            }\n            setStreak(count);\n          }\n        }\n      }\n    } catch (err) {\n      console.error('[useDailyChallenge] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, []);\n\n  useEffect(() => { load(); }, [load]);\n\n  const submitCheckin = useCallback(async (response?: string) => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Nao autenticado' };\n\n      const today = new Date().toISOString().split('T')[0];\n      const newStreak = streak + 1;\n\n      const { error } = await supabase.from('daily_checkins').upsert({\n        user_id: user.id,\n        checkin_date: today,\n        response: response?.trim() || null,\n        challenge_id: todayChallenge?.id || null,\n        streak_count: newStreak,\n      }, { onConflict: 'user_id,checkin_date' });\n\n      if (error) throw error;\n\n      // Incrementar response_count no desafio\n      if (todayChallenge?.id) {\n        await supabase.rpc('increment_challenge_response', { challenge_id: todayChallenge.id }).catch(() => {\n          // Fallback: update direto se RPC nao existir\n          supabase\n            .from('daily_challenges')\n            .update({ response_count: (todayChallenge.response_count || 0) + 1 })\n            .eq('id', todayChallenge.id)\n            .then(() => {});\n        });\n      }\n\n      setTodayCheckin({\n        id: '',\n        user_id: user.id,\n        checkin_date: today,\n        response: response?.trim() || null,\n        challenge_id: todayChallenge?.id || null,\n        streak_count: newStreak,\n      });\n      setStreak(newStreak);\n\n      return { success: true, streak: newStreak };\n    } catch (err: any) {\n      console.error('[useDailyChallenge] Erro no checkin:', err);\n      return { success: false, error: err.message };\n    }\n  }, [todayChallenge, streak]);\n\n  return {\n    todayChallenge,\n    todayCheckin,\n    streak,\n    isLoading,\n    submitCheckin,\n    hasCheckedIn: !!todayCheckin,\n    refresh: load,\n  };\n}\n"
+/**
+ * useDailyChallenge — Hook para desafios diarios (Rituais do Dia)
+ * v2.0: Alinhado com DailyRitualModal + fallback sem desafio
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from './supabase';
+
+export interface DailyChallenge {
+  id: string;
+  challenge_date: string;
+  title: string;
+  description: string;
+  challenge_type: string;
+  is_active: boolean;
+  response_count: number;
+}
+
+export interface DailyCheckin {
+  id: string;
+  user_id: string;
+  checkin_date: string;
+  response: string | null;
+  challenge_id: string | null;
+  streak_count: number;
+}
+
+export function useDailyChallenge() {
+  const [todayChallenge, setTodayChallenge] = useState<DailyChallenge | null>(null);
+  const [todayCheckin, setTodayCheckin] = useState<DailyCheckin | null>(null);
+  const [streak, setStreak] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Buscar desafio de hoje
+      const { data: challenge } = await supabase
+        .from('daily_challenges')
+        .select('*')
+        .eq('challenge_date', today)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      setTodayChallenge(challenge || null);
+
+      // Verificar se usuario ja fez checkin hoje
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: checkin } = await supabase
+          .from('daily_checkins')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('checkin_date', today)
+          .maybeSingle();
+
+        setTodayCheckin(checkin || null);
+
+        // Calcular streak — contar dias consecutivos com checkin
+        try {
+          const { data: streakData } = await supabase.rpc('get_user_streak', { target_user_id: user.id });
+          setStreak(streakData || 0);
+        } catch {
+          // Se a funcao RPC nao existir, calcular localmente
+          const { data: recentCheckins } = await supabase
+            .from('daily_checkins')
+            .select('checkin_date')
+            .eq('user_id', user.id)
+            .order('checkin_date', { ascending: false })
+            .limit(60);
+
+          if (recentCheckins && recentCheckins.length > 0) {
+            let count = 0;
+            const now = new Date();
+            for (let i = 0; i < 60; i++) {
+              const checkDate = new Date(now);
+              checkDate.setDate(checkDate.getDate() - i);
+              const dateStr = checkDate.toISOString().split('T')[0];
+              if (recentCheckins.some(c => c.checkin_date === dateStr)) {
+                count++;
+              } else if (i > 0) {
+                break; // Quebrou a sequencia
+              }
+            }
+            setStreak(count);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[useDailyChallenge] Erro:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const submitCheckin = useCallback(async (response?: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Nao autenticado' };
+
+      const today = new Date().toISOString().split('T')[0];
+      const newStreak = streak + 1;
+
+      const { error } = await supabase.from('daily_checkins').upsert({
+        user_id: user.id,
+        checkin_date: today,
+        response: response?.trim() || null,
+        challenge_id: todayChallenge?.id || null,
+        streak_count: newStreak,
+      }, { onConflict: 'user_id,checkin_date' });
+
+      if (error) throw error;
+
+      // Incrementar response_count no desafio
+      if (todayChallenge?.id) {
+        await supabase.rpc('increment_challenge_response', { challenge_id: todayChallenge.id }).catch(() => {
+          // Fallback: update direto se RPC nao existir
+          supabase
+            .from('daily_challenges')
+            .update({ response_count: (todayChallenge.response_count || 0) + 1 })
+            .eq('id', todayChallenge.id)
+            .then(() => {});
+        });
+      }
+
+      setTodayCheckin({
+        id: '',
+        user_id: user.id,
+        checkin_date: today,
+        response: response?.trim() || null,
+        challenge_id: todayChallenge?.id || null,
+        streak_count: newStreak,
+      });
+      setStreak(newStreak);
+
+      return { success: true, streak: newStreak };
+    } catch (err: any) {
+      console.error('[useDailyChallenge] Erro no checkin:', err);
+      return { success: false, error: err.message };
+    }
+  }, [todayChallenge, streak]);
+
+  return {
+    todayChallenge,
+    todayCheckin,
+    streak,
+    isLoading,
+    submitCheckin,
+    hasCheckedIn: !!todayCheckin,
+    refresh: load,
+  };
 }

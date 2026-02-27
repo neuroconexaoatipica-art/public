@@ -1,7 +1,635 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/routes.tsx",
-  "created_at": "2026-02-27T05:36:09.436Z",
-  "file_content": "/**\n * routes.tsx — React Router config para NeuroConexão Atípica\n * \n * Abordagem WRAPPER SEGURA: componentes existentes NÃO mudam.\n * Cada rota tem um wrapper que cria as props esperadas pelo componente.\n * useNavigate() substitui o antigo handleNavigate/currentPage.\n */\n\nimport { createBrowserRouter, Outlet, useNavigate, useParams, Navigate, useLocation } from \"react-router\";\nimport { useState, useEffect, useRef, useCallback, lazy, Suspense } from \"react\";\nimport { motion } from \"motion/react\";\n\n// ── Providers e Contextos ──\nimport { ProfileProvider, useProfileContext } from \"../lib/ProfileContext\";\nimport { CommunitiesProvider, useCommunitiesContext } from \"../lib/CommunitiesContext\";\nimport { ModalProvider, useModalContext } from \"../lib/ModalContext\";\nimport { hasAppAccess, isSuperAdmin } from \"../lib/roleEngine\";\nimport { isWaitingApproval, isBanned } from \"../lib/roleEngine\";\nimport { supabase } from \"../lib/supabase\";\n\n// ── Componentes Landing (sempre carregados) ──\nimport { HeaderInstitucional } from \"./components/HeaderInstitucional\";\nimport { HeroSection } from \"./components/HeroSection\";\nimport { CommunitiesShowcase } from \"./components/CommunitiesShowcase\";\nimport { CreatorSection } from \"./components/CreatorSection\";\nimport { NucleoFounderSection } from \"./components/NucleoFounderSection\";\nimport { ClaritySection } from \"./components/ClaritySection\";\nimport { FooterInstitucional } from \"./components/FooterInstitucional\";\nimport { PulsoVivo } from \"./components/PulsoVivo\";\nimport { NucleosTerritoriais } from \"./components/NucleosTerritoriais\";\nimport { HowItWorksSection } from \"./components/HowItWorksSection\";\nimport { PlansSection } from \"./components/PlansSection\";\nimport { EncounterBanner } from \"./components/EncounterBanner\";\nimport { WeeklyHighlights } from \"./components/WeeklyHighlights\";\nimport { FounderVideoSection } from \"./components/FounderVideoSection\";\nimport { ManifestoSection } from \"./components/ManifestoSection\";\nimport { SocialProofStrip } from \"./components/SocialProofStrip\";\nimport { TestimonialsCarousel } from \"./components/TestimonialsCarousel\";\nimport { FAQSection } from \"./components/FAQSection\";\nimport { ErrorBoundary } from \"./components/ErrorBoundary\";\nimport { LogoIcon } from \"./components/LogoIcon\";\nimport { NotFoundPage } from \"./components/NotFoundPage\";\n\n// ── Modais (sempre carregados) ──\nimport { SignupPopup } from \"./components/SignupPopup\";\nimport { LoginPopup } from \"./components/LoginPopup\";\nimport { OnboardingFlow } from \"./components/OnboardingFlow\";\nimport { ContactFounderModal } from \"./components/ContactFounderModal\";\n\n// ── Paginas internas (lazy) ──\nconst WelcomePage = lazy(() => import(\"./components/WelcomePage\").then(m => ({ default: m.WelcomePage })));\nconst SocialHub = lazy(() => import(\"./components/SocialHub\").then(m => ({ default: m.SocialHub })));\nconst ProfileMila = lazy(() => import(\"./components/ProfileMila\").then(m => ({ default: m.ProfileMila })));\nconst FeedPublico = lazy(() => import(\"./components/FeedPublico\").then(m => ({ default: m.FeedPublico })));\nconst CommunitiesPage = lazy(() => import(\"./components/CommunitiesPage\").then(m => ({ default: m.CommunitiesPage })));\nconst CommunityPage = lazy(() => import(\"./components/CommunityPage\").then(m => ({ default: m.CommunityPage })));\nconst EventsPage = lazy(() => import(\"./components/EventsPage\").then(m => ({ default: m.EventsPage })));\nconst EventDetailPage = lazy(() => import(\"./components/EventDetailPage\").then(m => ({ default: m.EventDetailPage })));\nconst MessagesPage = lazy(() => import(\"./components/MessagesPage\").then(m => ({ default: m.MessagesPage })));\nconst AdminDashboard = lazy(() => import(\"./components/AdminDashboard\").then(m => ({ default: m.AdminDashboard })));\nconst RoadmapPage = lazy(() => import(\"./components/RoadmapPage\").then(m => ({ default: m.RoadmapPage })));\nconst DeployBridge = lazy(() => import(\"./components/DeployBridge\").then(m => ({ default: m.DeployBridge })));\nconst WaitingRoom = lazy(() => import(\"./components/WaitingRoom\").then(m => ({ default: m.WaitingRoom })));\nconst SettingsPage = lazy(() => import(\"./components/SettingsPage\").then(m => ({ default: m.SettingsPage })));\nconst FoundersRoom = lazy(() => import(\"./components/FoundersRoom\").then(m => ({ default: m.FoundersRoom })));\n\n// Legal pages\nconst EthicsPage = lazy(() => import(\"./components/EthicsPage\").then(m => ({ default: m.EthicsPage })));\nconst WarningsPage = lazy(() => import(\"./components/WarningsPage\").then(m => ({ default: m.WarningsPage })));\nconst PrivacyPolicyPage = lazy(() => import(\"./components/PrivacyPolicyPage\").then(m => ({ default: m.PrivacyPolicyPage })));\nconst TermsOfUsePage = lazy(() => import(\"./components/TermsOfUsePage\").then(m => ({ default: m.TermsOfUsePage })));\nconst LegalPageView = lazy(() => import(\"./components/LegalPageView\").then(m => ({ default: m.LegalPageView })));\n\n// ═══════════════════════════════════════════════════════════\n// LOADING FALLBACK\n// ═══════════════════════════════════════════════════════════\nfunction LazyFallback() {\n  return (\n    <div className=\"min-h-screen flex items-center justify-center\" style={{ background: \"#000\" }}>\n      <div className=\"text-center\">\n        <div className=\"w-10 h-10 border-3 border-[#C8102E] border-t-transparent rounded-full animate-spin mx-auto\" />\n        <p className=\"text-[#999] text-sm mt-4\">Carregando...</p>\n      </div>\n    </div>\n  );\n}\n\n// ═══════════════════════════════════════════════════════════\n// ROOT LAYOUT — Providers + Modais + Auth Interceptors\n// ═══════════════════════════════════════════════════════════\nfunction RootLayout() {\n  return (\n    <ErrorBoundary>\n      <ProfileProvider>\n        <CommunitiesProvider>\n          <ModalProvider>\n            <RootLayoutInner />\n          </ModalProvider>\n        </CommunitiesProvider>\n      </ProfileProvider>\n    </ErrorBoundary>\n  );\n}\n\nfunction RootLayoutInner() {\n  const { user: currentUser, isLoading } = useProfileContext();\n  const navigate = useNavigate();\n  const location = useLocation();\n  const {\n    isSignupOpen, isLoginOpen, isOnboardingOpen, isContactFounderOpen,\n    openSignup, openLogin, closeSignup, closeLogin,\n    closeOnboarding, closeContactFounder,\n    handleSignupSuccess, handleLoginSuccess,\n  } = useModalContext();\n\n  // ── Compatibilidade: redirecionar hash antigos para rotas reais ──\n  useEffect(() => {\n    const hash = window.location.hash.replace('#', '');\n    const hashRoutes: Record<string, string> = {\n      'privacy': '/privacy',\n      'terms': '/terms',\n      'ethics': '/ethics',\n      'warnings': '/warnings',\n      'moderation': '/moderation',\n      'security': '/security',\n      'child-protection': '/child-protection',\n      'deploy': '/deploy',\n    };\n    if (hash && hashRoutes[hash]) {\n      navigate(hashRoutes[hash], { replace: true });\n    }\n  }, []);\n\n  // ── Onboarding concluido → gravar e redirecionar ──\n  const handleOnboardingComplete = async () => {\n    closeOnboarding();\n    const { data: { session } } = await supabase.auth.getSession();\n    if (session?.user) {\n      await supabase\n        .from('users')\n        .update({ onboarding_done: true })\n        .eq('id', session.user.id);\n    }\n    navigate('/welcome');\n  };\n\n  // ── Loading global ──\n  if (isLoading) {\n    return (\n      <div className=\"min-h-screen flex items-center justify-center\" style={{ background: \"#D4D4D4\" }}>\n        <motion.div\n          initial={{ opacity: 0, y: 10 }}\n          animate={{ opacity: 1, y: 0 }}\n          transition={{ duration: 0.5 }}\n          className=\"text-center\"\n        >\n          <LogoIcon size={64} className=\"h-16 w-16 mx-auto mb-5\" />\n          <h1 className=\"text-xl text-[#1A1A1A] mb-4\" style={{ fontWeight: 600 }}>NeuroConexao Atipica</h1>\n          <div className=\"w-10 h-10 border-3 border-[#C8102E] border-t-transparent rounded-full animate-spin mx-auto\" />\n          <p className=\"text-[#999] text-sm mt-4\">Conectando...</p>\n        </motion.div>\n      </div>\n    );\n  }\n\n  // ── Interceptor: WaitingRoom ──\n  if (currentUser && isWaitingApproval(currentUser.role)) {\n    return (\n      <Suspense fallback={<div className=\"min-h-screen bg-black\" />}>\n        <WaitingRoom onLogout={async () => { await supabase.auth.signOut(); navigate('/'); }} />\n      </Suspense>\n    );\n  }\n\n  // ── Interceptor: Banido ──\n  if (currentUser && isBanned(currentUser.role)) {\n    return (\n      <div className=\"min-h-screen flex items-center justify-center p-6\" style={{ background: \"#0A0A0A\" }}>\n        <div className=\"max-w-md text-center\">\n          <LogoIcon size={48} className=\"h-12 w-12 mx-auto mb-6\" />\n          <h1 className=\"text-2xl text-white mb-3\" style={{ fontWeight: 700 }}>Acesso suspenso</h1>\n          <p className=\"text-sm text-white/50 mb-6\">\n            Sua conta foi suspensa. Se acredita que isso e um erro, entre em contato pelo formulario da landing page.\n          </p>\n          <button\n            onClick={async () => { await supabase.auth.signOut(); navigate('/'); }}\n            className=\"px-6 py-3 bg-white/10 text-white/60 rounded-xl text-sm hover:bg-white/15 transition-colors\"\n            style={{ fontWeight: 600 }}\n          >\n            Sair\n          </button>\n        </div>\n      </div>\n    );\n  }\n\n  return (\n    <>\n      {/* Paginas com transicao */}\n      <motion.div\n        key={location.pathname}\n        initial={{ opacity: 0 }}\n        animate={{ opacity: 1 }}\n        transition={{ duration: 0.25 }}\n      >\n        <Outlet />\n      </motion.div>\n\n      {/* Modais globais — acessiveis de qualquer rota */}\n      <SignupPopup\n        isOpen={isSignupOpen}\n        onClose={closeSignup}\n        onSwitchToLogin={openLogin}\n        onSuccess={handleSignupSuccess}\n      />\n      <LoginPopup\n        isOpen={isLoginOpen}\n        onClose={closeLogin}\n        onSwitchToSignup={openSignup}\n        onLoginSuccess={handleLoginSuccess}\n      />\n      <OnboardingFlow\n        isOpen={isOnboardingOpen}\n        onClose={closeOnboarding}\n        onComplete={handleOnboardingComplete}\n      />\n      <ContactFounderModal\n        isOpen={isContactFounderOpen}\n        onClose={closeContactFounder}\n      />\n    </>\n  );\n}\n\n// ═══════════════════════════════════════════════════════════\n// PUBLIC LAYOUT — Header + Footer (landing + paginas legais)\n// ═══════════════════════════════════════════════════════════\nfunction PublicLayout() {\n  const { openLogin, openSignup } = useModalContext();\n  const navigate = useNavigate();\n\n  return (\n    <div className=\"min-h-screen\" style={{ background: \"#D4D4D4\" }}>\n      <HeaderInstitucional\n        onLoginClick={openLogin}\n        onSignupClick={openSignup}\n        onNavigate={(page) => navigate(`/${page}`)}\n      />\n      <Outlet />\n      <FooterInstitucional onNavigate={(page) => navigate(`/${page}`)} />\n    </div>\n  );\n}\n\n// ═══════════════════════════════════════════════════════════\n// AUTH LAYOUT — Protege rotas internas (precisa estar logado)\n// ═══════════════════════════════════════════════════════════\nfunction AuthLayout() {\n  const { user } = useProfileContext();\n\n  // Se nao tem usuario ou nao tem acesso → redirecionar pra landing\n  if (!user || !hasAppAccess(user.role)) {\n    return <Navigate to=\"/\" replace />;\n  }\n\n  return (\n    <Suspense fallback={<LazyFallback />}>\n      <Outlet />\n    </Suspense>\n  );\n}\n\n// ═══════════════════════════════════════════════════════════\n// WRAPPERS — Ponte entre React Router e componentes existentes\n// Cada wrapper cria as props que o componente espera.\n// ═══════════════════════════════════════════════════════════\n\n// ── Landing Page (16 secoes) ──\nfunction LandingRoute() {\n  const { user } = useProfileContext();\n  const navigate = useNavigate();\n  const { openSignup } = useModalContext();\n  const nucleoRef = useRef<HTMLElement>(null);\n  const agendaRef = useRef<HTMLElement>(null);\n\n  const scrollToAgenda = useCallback(() => {\n    agendaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });\n  }, []);\n\n  const scrollToNucleo = useCallback(() => {\n    nucleoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });\n  }, []);\n\n  // Redirecionar usuario logado com acesso para o hub\n  useEffect(() => {\n    if (user && hasAppAccess(user.role)) {\n      navigate('/hub', { replace: true });\n    }\n  }, [user, navigate]);\n\n  // Se vai redirecionar, nao renderizar landing\n  if (user && hasAppAccess(user.role)) return null;\n\n  return (\n    <>\n      {/* 1. GANCHO */}\n      <HeroSection onCtaClick={openSignup} onScrollToAgenda={scrollToAgenda} onScrollToNucleo={scrollToNucleo} />\n      {/* 2. PULSO */}\n      <PulsoVivo ref={agendaRef} />\n      {/* 3. PROVA */}\n      <SocialProofStrip />\n      {/* 4. ATIVIDADE */}\n      <WeeklyHighlights />\n      {/* 5. TERRITORIOS */}\n      <CommunitiesShowcase />\n      {/* 6. COMO */}\n      <HowItWorksSection />\n      {/* 7. VOZES */}\n      <TestimonialsCarousel />\n      {/* 8. URGENCIA */}\n      <PlansSection onCtaClick={openSignup} />\n      {/* 9. VIDEO */}\n      <FounderVideoSection />\n      {/* 10. LIDERANCA */}\n      <NucleoFounderSection ref={nucleoRef} />\n      {/* 11. NUCLEOS */}\n      <NucleosTerritoriais />\n      {/* 12. EVENTO */}\n      <EncounterBanner />\n      {/* 13. CRIADORA */}\n      <CreatorSection />\n      {/* 14. MANIFESTO */}\n      <ManifestoSection />\n      {/* 15. FAQ */}\n      <FAQSection />\n      {/* 16. CTA FINAL */}\n      <ClaritySection onCtaClick={openSignup} />\n    </>\n  );\n}\n\n// ── Paginas Legais ──\nfunction LegalRoute({ pageKey, fallback }: { pageKey: string; fallback?: React.ReactNode }) {\n  const navigate = useNavigate();\n  return (\n    <Suspense fallback={<LazyFallback />}>\n      <LegalPageView pageKey={pageKey} fallback={fallback} onBack={() => navigate('/')} />\n    </Suspense>\n  );\n}\n\nfunction WarningsRoute() {\n  return (\n    <Suspense fallback={<LazyFallback />}>\n      <WarningsPage />\n    </Suspense>\n  );\n}\n\n// ── Welcome ──\nfunction WelcomeRoute() {\n  const navigate = useNavigate();\n  const { openContactFounder } = useModalContext();\n  return (\n    <Suspense fallback={<LazyFallback />}>\n      <WelcomePage\n        onCreatePost={() => navigate('/hub')}\n        onCompleteProfile={() => navigate('/profile')}\n        onContactFounder={openContactFounder}\n      />\n    </Suspense>\n  );\n}\n\n// ── Social Hub ──\nfunction SocialHubRoute() {\n  const navigate = useNavigate();\n  return (\n    <SocialHub\n      onNavigateToProfile={() => navigate('/profile')}\n      onNavigateToCommunities={() => navigate('/communities')}\n      onNavigateToFeed={() => navigate('/feed')}\n      onNavigateToUserProfile={(userId) => navigate(`/profile/${userId}`)}\n      onNavigateToEvents={() => navigate('/events')}\n      onNavigateToMessages={() => navigate('/messages')}\n      onNavigateToAdmin={() => navigate('/admin')}\n      onNavigateToSettings={() => navigate('/settings')}\n      onNavigateToFoundersRoom={() => navigate('/founders-room')}\n    />\n  );\n}\n\n// ── Perfil (proprio ou de outro user) ──\nfunction ProfileRoute() {\n  const navigate = useNavigate();\n  const { userId } = useParams();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <ProfileMila\n      onBack={() => navigate(backPath)}\n      viewUserId={userId || null}\n      onNavigateToProfile={(id) => navigate(`/profile/${id}`)}\n    />\n  );\n}\n\n// ── Feed ──\nfunction FeedRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <FeedPublico\n      onBack={() => navigate(backPath)}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Comunidades (lista) ──\nfunction CommunitiesRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <CommunitiesPage\n      onBack={() => navigate(backPath)}\n      onSelectCommunity={(community) => navigate(`/community/${community.id}`)}\n    />\n  );\n}\n\n// ── Comunidade (detalhe) ──\nfunction CommunityDetailRoute() {\n  const navigate = useNavigate();\n  const { id } = useParams();\n  const { getCommunityById, isLoading } = useCommunitiesContext();\n\n  const community = id ? getCommunityById(id) : undefined;\n\n  // Ainda carregando comunidades\n  if (isLoading) {\n    return <LazyFallback />;\n  }\n\n  // Comunidade nao encontrada\n  if (!community) {\n    return <NotFoundPage />;\n  }\n\n  return (\n    <CommunityPage\n      community={community}\n      onBack={() => navigate('/communities')}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Eventos (lista) ──\nfunction EventsRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <EventsPage\n      onBack={() => navigate(backPath)}\n      onSelectEvent={(event) => navigate(`/event/${event.id}`)}\n    />\n  );\n}\n\n// ── Evento (detalhe) ──\nfunction EventDetailRoute() {\n  const navigate = useNavigate();\n  const { id } = useParams();\n\n  if (!id) {\n    return <NotFoundPage />;\n  }\n\n  return (\n    <EventDetailPage\n      eventId={id}\n      onBack={() => navigate('/events')}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Mensagens ──\nfunction MessagesRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <MessagesPage\n      onBack={() => navigate(backPath)}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Admin ──\nfunction AdminRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n\n  if (!isSuperAdmin(user?.role)) {\n    return <Navigate to=\"/hub\" replace />;\n  }\n\n  return (\n    <AdminDashboard\n      onBack={() => navigate('/hub')}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Roadmap ──\nfunction RoadmapRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return <RoadmapPage onBack={() => navigate(backPath)} />;\n}\n\n// ── Deploy Bridge ──\nfunction DeployRoute() {\n  return (\n    <Suspense fallback={<div className=\"min-h-screen bg-black text-white flex items-center justify-center\">Carregando Deploy Bridge...</div>}>\n      <DeployBridge />\n    </Suspense>\n  );\n}\n\n// ── Settings ──\nfunction SettingsRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <SettingsPage\n      onBack={() => navigate(backPath)}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ── Founders Room ──\nfunction FoundersRoomRoute() {\n  const navigate = useNavigate();\n  const { user } = useProfileContext();\n  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';\n  return (\n    <FoundersRoom\n      onBack={() => navigate(backPath)}\n      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}\n    />\n  );\n}\n\n// ═══════════════════════════════════════════════════════════\n// ROUTER CONFIG\n// ═══════════════════════════════════════════════════════════\n\nexport const router = createBrowserRouter([\n  {\n    path: \"/\",\n    Component: RootLayout,\n    children: [\n      // ── Rotas publicas (com header/footer) ──\n      {\n        Component: PublicLayout,\n        children: [\n          { index: true, Component: LandingRoute },\n          {\n            path: \"ethics\",\n            element: <LegalRoute pageKey=\"ethics\" fallback={<Suspense fallback={<LazyFallback />}><EthicsPage /></Suspense>} />,\n          },\n          { path: \"warnings\", Component: WarningsRoute },\n          {\n            path: \"privacy\",\n            element: <LegalRoute pageKey=\"privacy_policy\" fallback={<Suspense fallback={<LazyFallback />}><PrivacyPolicyPage /></Suspense>} />,\n          },\n          {\n            path: \"terms\",\n            element: <LegalRoute pageKey=\"terms_of_use\" fallback={<Suspense fallback={<LazyFallback />}><TermsOfUsePage /></Suspense>} />,\n          },\n          {\n            path: \"moderation\",\n            element: <LegalRoute pageKey=\"moderation_policy\" />,\n          },\n          {\n            path: \"security\",\n            element: <LegalRoute pageKey=\"security_policy\" />,\n          },\n          {\n            path: \"child-protection\",\n            element: <LegalRoute pageKey=\"child_protection_policy\" />,\n          },\n        ],\n      },\n\n      // ── Rotas protegidas (sem header/footer, precisa de auth) ──\n      {\n        Component: AuthLayout,\n        children: [\n          { path: \"welcome\", Component: WelcomeRoute },\n          { path: \"hub\", Component: SocialHubRoute },\n          { path: \"profile\", Component: ProfileRoute },\n          { path: \"profile/:userId\", Component: ProfileRoute },\n          { path: \"feed\", Component: FeedRoute },\n          { path: \"communities\", Component: CommunitiesRoute },\n          { path: \"community/:id\", Component: CommunityDetailRoute },\n          { path: \"events\", Component: EventsRoute },\n          { path: \"event/:id\", Component: EventDetailRoute },\n          { path: \"messages\", Component: MessagesRoute },\n          { path: \"admin\", Component: AdminRoute },\n          { path: \"roadmap\", Component: RoadmapRoute },\n          { path: \"settings\", Component: SettingsRoute },\n          { path: \"founders-room\", Component: FoundersRoomRoute },\n        ],\n      },\n\n      // ── Deploy Bridge (rota especial, sem layout) ──\n      { path: \"deploy\", Component: DeployRoute },\n\n      // ── 404 ──\n      { path: \"*\", Component: NotFoundPage },\n    ],\n  },\n]);"
+/**
+ * routes.tsx — React Router config para NeuroConexão Atípica
+ * 
+ * Abordagem WRAPPER SEGURA: componentes existentes NÃO mudam.
+ * Cada rota tem um wrapper que cria as props esperadas pelo componente.
+ * useNavigate() substitui o antigo handleNavigate/currentPage.
+ */
+
+import { createBrowserRouter, Outlet, useNavigate, useParams, Navigate, useLocation } from "react-router";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { motion } from "motion/react";
+
+// ── Providers e Contextos ──
+import { ProfileProvider, useProfileContext } from "../lib/ProfileContext";
+import { CommunitiesProvider, useCommunitiesContext } from "../lib/CommunitiesContext";
+import { ModalProvider, useModalContext } from "../lib/ModalContext";
+import { hasAppAccess, isSuperAdmin } from "../lib/roleEngine";
+import { isWaitingApproval, isBanned } from "../lib/roleEngine";
+import { supabase } from "../lib/supabase";
+
+// ── Componentes Landing (sempre carregados) ──
+import { HeaderInstitucional } from "./components/HeaderInstitucional";
+import { HeroSection } from "./components/HeroSection";
+import { CommunitiesShowcase } from "./components/CommunitiesShowcase";
+import { CreatorSection } from "./components/CreatorSection";
+import { NucleoFounderSection } from "./components/NucleoFounderSection";
+import { ClaritySection } from "./components/ClaritySection";
+import { FooterInstitucional } from "./components/FooterInstitucional";
+import { PulsoVivo } from "./components/PulsoVivo";
+import { NucleosTerritoriais } from "./components/NucleosTerritoriais";
+import { HowItWorksSection } from "./components/HowItWorksSection";
+import { PlansSection } from "./components/PlansSection";
+import { EncounterBanner } from "./components/EncounterBanner";
+import { WeeklyHighlights } from "./components/WeeklyHighlights";
+import { FounderVideoSection } from "./components/FounderVideoSection";
+import { ManifestoSection } from "./components/ManifestoSection";
+import { SocialProofStrip } from "./components/SocialProofStrip";
+import { TestimonialsCarousel } from "./components/TestimonialsCarousel";
+import { FAQSection } from "./components/FAQSection";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { LogoIcon } from "./components/LogoIcon";
+import { NotFoundPage } from "./components/NotFoundPage";
+
+// ── Modais (sempre carregados) ──
+import { SignupPopup } from "./components/SignupPopup";
+import { LoginPopup } from "./components/LoginPopup";
+import { OnboardingFlow } from "./components/OnboardingFlow";
+import { ContactFounderModal } from "./components/ContactFounderModal";
+
+// ── Paginas internas (lazy) ──
+const WelcomePage = lazy(() => import("./components/WelcomePage").then(m => ({ default: m.WelcomePage })));
+const SocialHub = lazy(() => import("./components/SocialHub").then(m => ({ default: m.SocialHub })));
+const ProfileMila = lazy(() => import("./components/ProfileMila").then(m => ({ default: m.ProfileMila })));
+const FeedPublico = lazy(() => import("./components/FeedPublico").then(m => ({ default: m.FeedPublico })));
+const CommunitiesPage = lazy(() => import("./components/CommunitiesPage").then(m => ({ default: m.CommunitiesPage })));
+const CommunityPage = lazy(() => import("./components/CommunityPage").then(m => ({ default: m.CommunityPage })));
+const EventsPage = lazy(() => import("./components/EventsPage").then(m => ({ default: m.EventsPage })));
+const EventDetailPage = lazy(() => import("./components/EventDetailPage").then(m => ({ default: m.EventDetailPage })));
+const MessagesPage = lazy(() => import("./components/MessagesPage").then(m => ({ default: m.MessagesPage })));
+const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
+const RoadmapPage = lazy(() => import("./components/RoadmapPage").then(m => ({ default: m.RoadmapPage })));
+const DeployBridge = lazy(() => import("./components/DeployBridge").then(m => ({ default: m.DeployBridge })));
+const WaitingRoom = lazy(() => import("./components/WaitingRoom").then(m => ({ default: m.WaitingRoom })));
+const SettingsPage = lazy(() => import("./components/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const FoundersRoom = lazy(() => import("./components/FoundersRoom").then(m => ({ default: m.FoundersRoom })));
+
+// Legal pages
+const EthicsPage = lazy(() => import("./components/EthicsPage").then(m => ({ default: m.EthicsPage })));
+const WarningsPage = lazy(() => import("./components/WarningsPage").then(m => ({ default: m.WarningsPage })));
+const PrivacyPolicyPage = lazy(() => import("./components/PrivacyPolicyPage").then(m => ({ default: m.PrivacyPolicyPage })));
+const TermsOfUsePage = lazy(() => import("./components/TermsOfUsePage").then(m => ({ default: m.TermsOfUsePage })));
+const LegalPageView = lazy(() => import("./components/LegalPageView").then(m => ({ default: m.LegalPageView })));
+
+// ═══════════════════════════════════════════════════════════
+// LOADING FALLBACK
+// ═══════════════════════════════════════════════════════════
+function LazyFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "#000" }}>
+      <div className="text-center">
+        <div className="w-10 h-10 border-3 border-[#C8102E] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-[#999] text-sm mt-4">Carregando...</p>
+      </div>
+    </div>
+  );
 }
+
+// ═══════════════════════════════════════════════════════════
+// ROOT LAYOUT — Providers + Modais + Auth Interceptors
+// ═══════════════════════════════════════════════════════════
+function RootLayout() {
+  return (
+    <ErrorBoundary>
+      <ProfileProvider>
+        <CommunitiesProvider>
+          <ModalProvider>
+            <RootLayoutInner />
+          </ModalProvider>
+        </CommunitiesProvider>
+      </ProfileProvider>
+    </ErrorBoundary>
+  );
+}
+
+function RootLayoutInner() {
+  const { user: currentUser, isLoading } = useProfileContext();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    isSignupOpen, isLoginOpen, isOnboardingOpen, isContactFounderOpen,
+    openSignup, openLogin, closeSignup, closeLogin,
+    closeOnboarding, closeContactFounder,
+    handleSignupSuccess, handleLoginSuccess,
+  } = useModalContext();
+
+  // ── Compatibilidade: redirecionar hash antigos para rotas reais ──
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    const hashRoutes: Record<string, string> = {
+      'privacy': '/privacy',
+      'terms': '/terms',
+      'ethics': '/ethics',
+      'warnings': '/warnings',
+      'moderation': '/moderation',
+      'security': '/security',
+      'child-protection': '/child-protection',
+      'deploy': '/deploy',
+    };
+    if (hash && hashRoutes[hash]) {
+      navigate(hashRoutes[hash], { replace: true });
+    }
+  }, []);
+
+  // ── Onboarding concluido → gravar e redirecionar ──
+  const handleOnboardingComplete = async () => {
+    closeOnboarding();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await supabase
+        .from('users')
+        .update({ onboarding_done: true })
+        .eq('id', session.user.id);
+    }
+    navigate('/welcome');
+  };
+
+  // ── Loading global ──
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#D4D4D4" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <LogoIcon size={64} className="h-16 w-16 mx-auto mb-5" />
+          <h1 className="text-xl text-[#1A1A1A] mb-4" style={{ fontWeight: 600 }}>NeuroConexao Atipica</h1>
+          <div className="w-10 h-10 border-3 border-[#C8102E] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-[#999] text-sm mt-4">Conectando...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ── Interceptor: WaitingRoom ──
+  if (currentUser && isWaitingApproval(currentUser.role)) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-black" />}>
+        <WaitingRoom onLogout={async () => { await supabase.auth.signOut(); navigate('/'); }} />
+      </Suspense>
+    );
+  }
+
+  // ── Interceptor: Banido ──
+  if (currentUser && isBanned(currentUser.role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#0A0A0A" }}>
+        <div className="max-w-md text-center">
+          <LogoIcon size={48} className="h-12 w-12 mx-auto mb-6" />
+          <h1 className="text-2xl text-white mb-3" style={{ fontWeight: 700 }}>Acesso suspenso</h1>
+          <p className="text-sm text-white/50 mb-6">
+            Sua conta foi suspensa. Se acredita que isso e um erro, entre em contato pelo formulario da landing page.
+          </p>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); navigate('/'); }}
+            className="px-6 py-3 bg-white/10 text-white/60 rounded-xl text-sm hover:bg-white/15 transition-colors"
+            style={{ fontWeight: 600 }}
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Paginas com transicao */}
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Outlet />
+      </motion.div>
+
+      {/* Modais globais — acessiveis de qualquer rota */}
+      <SignupPopup
+        isOpen={isSignupOpen}
+        onClose={closeSignup}
+        onSwitchToLogin={openLogin}
+        onSuccess={handleSignupSuccess}
+      />
+      <LoginPopup
+        isOpen={isLoginOpen}
+        onClose={closeLogin}
+        onSwitchToSignup={openSignup}
+        onLoginSuccess={handleLoginSuccess}
+      />
+      <OnboardingFlow
+        isOpen={isOnboardingOpen}
+        onClose={closeOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
+      <ContactFounderModal
+        isOpen={isContactFounderOpen}
+        onClose={closeContactFounder}
+      />
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PUBLIC LAYOUT — Header + Footer (landing + paginas legais)
+// ═══════════════════════════════════════════════════════════
+function PublicLayout() {
+  const { openLogin, openSignup } = useModalContext();
+  const navigate = useNavigate();
+
+  return (
+    <div className="min-h-screen" style={{ background: "#D4D4D4" }}>
+      <HeaderInstitucional
+        onLoginClick={openLogin}
+        onSignupClick={openSignup}
+        onNavigate={(page) => navigate(`/${page}`)}
+      />
+      <Outlet />
+      <FooterInstitucional onNavigate={(page) => navigate(`/${page}`)} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH LAYOUT — Protege rotas internas (precisa estar logado)
+// ═══════════════════════════════════════════════════════════
+function AuthLayout() {
+  const { user } = useProfileContext();
+
+  // Se nao tem usuario ou nao tem acesso → redirecionar pra landing
+  if (!user || !hasAppAccess(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <Suspense fallback={<LazyFallback />}>
+      <Outlet />
+    </Suspense>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// WRAPPERS — Ponte entre React Router e componentes existentes
+// Cada wrapper cria as props que o componente espera.
+// ═══════════════════════════════════════════════════════════
+
+// ── Landing Page (16 secoes) ──
+function LandingRoute() {
+  const { user } = useProfileContext();
+  const navigate = useNavigate();
+  const { openSignup } = useModalContext();
+  const nucleoRef = useRef<HTMLElement>(null);
+  const agendaRef = useRef<HTMLElement>(null);
+
+  const scrollToAgenda = useCallback(() => {
+    agendaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const scrollToNucleo = useCallback(() => {
+    nucleoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  // Redirecionar usuario logado com acesso para o hub
+  useEffect(() => {
+    if (user && hasAppAccess(user.role)) {
+      navigate('/hub', { replace: true });
+    }
+  }, [user, navigate]);
+
+  // Se vai redirecionar, nao renderizar landing
+  if (user && hasAppAccess(user.role)) return null;
+
+  return (
+    <>
+      {/* 1. GANCHO */}
+      <HeroSection onCtaClick={openSignup} onScrollToAgenda={scrollToAgenda} onScrollToNucleo={scrollToNucleo} />
+      {/* 2. PULSO */}
+      <PulsoVivo ref={agendaRef} />
+      {/* 3. PROVA */}
+      <SocialProofStrip />
+      {/* 4. ATIVIDADE */}
+      <WeeklyHighlights />
+      {/* 5. TERRITORIOS */}
+      <CommunitiesShowcase />
+      {/* 6. COMO */}
+      <HowItWorksSection />
+      {/* 7. VOZES */}
+      <TestimonialsCarousel />
+      {/* 8. URGENCIA */}
+      <PlansSection onCtaClick={openSignup} />
+      {/* 9. VIDEO */}
+      <FounderVideoSection />
+      {/* 10. LIDERANCA */}
+      <NucleoFounderSection ref={nucleoRef} />
+      {/* 11. NUCLEOS */}
+      <NucleosTerritoriais />
+      {/* 12. EVENTO */}
+      <EncounterBanner />
+      {/* 13. CRIADORA */}
+      <CreatorSection />
+      {/* 14. MANIFESTO */}
+      <ManifestoSection />
+      {/* 15. FAQ */}
+      <FAQSection />
+      {/* 16. CTA FINAL */}
+      <ClaritySection onCtaClick={openSignup} />
+    </>
+  );
+}
+
+// ── Paginas Legais ──
+function LegalRoute({ pageKey, fallback }: { pageKey: string; fallback?: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<LazyFallback />}>
+      <LegalPageView pageKey={pageKey} fallback={fallback} onBack={() => navigate('/')} />
+    </Suspense>
+  );
+}
+
+function WarningsRoute() {
+  return (
+    <Suspense fallback={<LazyFallback />}>
+      <WarningsPage />
+    </Suspense>
+  );
+}
+
+// ── Welcome ──
+function WelcomeRoute() {
+  const navigate = useNavigate();
+  const { openContactFounder } = useModalContext();
+  return (
+    <Suspense fallback={<LazyFallback />}>
+      <WelcomePage
+        onCreatePost={() => navigate('/hub')}
+        onCompleteProfile={() => navigate('/profile')}
+        onContactFounder={openContactFounder}
+      />
+    </Suspense>
+  );
+}
+
+// ── Social Hub ──
+function SocialHubRoute() {
+  const navigate = useNavigate();
+  return (
+    <SocialHub
+      onNavigateToProfile={() => navigate('/profile')}
+      onNavigateToCommunities={() => navigate('/communities')}
+      onNavigateToFeed={() => navigate('/feed')}
+      onNavigateToUserProfile={(userId) => navigate(`/profile/${userId}`)}
+      onNavigateToEvents={() => navigate('/events')}
+      onNavigateToMessages={() => navigate('/messages')}
+      onNavigateToAdmin={() => navigate('/admin')}
+      onNavigateToSettings={() => navigate('/settings')}
+      onNavigateToFoundersRoom={() => navigate('/founders-room')}
+    />
+  );
+}
+
+// ── Perfil (proprio ou de outro user) ──
+function ProfileRoute() {
+  const navigate = useNavigate();
+  const { userId } = useParams();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <ProfileMila
+      onBack={() => navigate(backPath)}
+      viewUserId={userId || null}
+      onNavigateToProfile={(id) => navigate(`/profile/${id}`)}
+    />
+  );
+}
+
+// ── Feed ──
+function FeedRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <FeedPublico
+      onBack={() => navigate(backPath)}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Comunidades (lista) ──
+function CommunitiesRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <CommunitiesPage
+      onBack={() => navigate(backPath)}
+      onSelectCommunity={(community) => navigate(`/community/${community.id}`)}
+    />
+  );
+}
+
+// ── Comunidade (detalhe) ──
+function CommunityDetailRoute() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const { getCommunityById, isLoading } = useCommunitiesContext();
+
+  const community = id ? getCommunityById(id) : undefined;
+
+  // Ainda carregando comunidades
+  if (isLoading) {
+    return <LazyFallback />;
+  }
+
+  // Comunidade nao encontrada
+  if (!community) {
+    return <NotFoundPage />;
+  }
+
+  return (
+    <CommunityPage
+      community={community}
+      onBack={() => navigate('/communities')}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Eventos (lista) ──
+function EventsRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <EventsPage
+      onBack={() => navigate(backPath)}
+      onSelectEvent={(event) => navigate(`/event/${event.id}`)}
+    />
+  );
+}
+
+// ── Evento (detalhe) ──
+function EventDetailRoute() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  if (!id) {
+    return <NotFoundPage />;
+  }
+
+  return (
+    <EventDetailPage
+      eventId={id}
+      onBack={() => navigate('/events')}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Mensagens ──
+function MessagesRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <MessagesPage
+      onBack={() => navigate(backPath)}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Admin ──
+function AdminRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+
+  if (!isSuperAdmin(user?.role)) {
+    return <Navigate to="/hub" replace />;
+  }
+
+  return (
+    <AdminDashboard
+      onBack={() => navigate('/hub')}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Roadmap ──
+function RoadmapRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return <RoadmapPage onBack={() => navigate(backPath)} />;
+}
+
+// ── Deploy Bridge ──
+function DeployRoute() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center">Carregando Deploy Bridge...</div>}>
+      <DeployBridge />
+    </Suspense>
+  );
+}
+
+// ── Settings ──
+function SettingsRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <SettingsPage
+      onBack={() => navigate(backPath)}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ── Founders Room ──
+function FoundersRoomRoute() {
+  const navigate = useNavigate();
+  const { user } = useProfileContext();
+  const backPath = user && hasAppAccess(user.role) ? '/hub' : '/';
+  return (
+    <FoundersRoom
+      onBack={() => navigate(backPath)}
+      onNavigateToProfile={(userId) => navigate(`/profile/${userId}`)}
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ROUTER CONFIG
+// ═══════════════════════════════════════════════════════════
+
+export const router = createBrowserRouter([
+  {
+    path: "/",
+    Component: RootLayout,
+    children: [
+      // ── Rotas publicas (com header/footer) ──
+      {
+        Component: PublicLayout,
+        children: [
+          { index: true, Component: LandingRoute },
+          {
+            path: "ethics",
+            element: <LegalRoute pageKey="ethics" fallback={<Suspense fallback={<LazyFallback />}><EthicsPage /></Suspense>} />,
+          },
+          { path: "warnings", Component: WarningsRoute },
+          {
+            path: "privacy",
+            element: <LegalRoute pageKey="privacy_policy" fallback={<Suspense fallback={<LazyFallback />}><PrivacyPolicyPage /></Suspense>} />,
+          },
+          {
+            path: "terms",
+            element: <LegalRoute pageKey="terms_of_use" fallback={<Suspense fallback={<LazyFallback />}><TermsOfUsePage /></Suspense>} />,
+          },
+          {
+            path: "moderation",
+            element: <LegalRoute pageKey="moderation_policy" />,
+          },
+          {
+            path: "security",
+            element: <LegalRoute pageKey="security_policy" />,
+          },
+          {
+            path: "child-protection",
+            element: <LegalRoute pageKey="child_protection_policy" />,
+          },
+        ],
+      },
+
+      // ── Rotas protegidas (sem header/footer, precisa de auth) ──
+      {
+        Component: AuthLayout,
+        children: [
+          { path: "welcome", Component: WelcomeRoute },
+          { path: "hub", Component: SocialHubRoute },
+          { path: "profile", Component: ProfileRoute },
+          { path: "profile/:userId", Component: ProfileRoute },
+          { path: "feed", Component: FeedRoute },
+          { path: "communities", Component: CommunitiesRoute },
+          { path: "community/:id", Component: CommunityDetailRoute },
+          { path: "events", Component: EventsRoute },
+          { path: "event/:id", Component: EventDetailRoute },
+          { path: "messages", Component: MessagesRoute },
+          { path: "admin", Component: AdminRoute },
+          { path: "roadmap", Component: RoadmapRoute },
+          { path: "settings", Component: SettingsRoute },
+          { path: "founders-room", Component: FoundersRoomRoute },
+        ],
+      },
+
+      // ── Deploy Bridge (rota especial, sem layout) ──
+      { path: "deploy", Component: DeployRoute },
+
+      // ── 404 ──
+      { path: "*", Component: NotFoundPage },
+    ],
+  },
+]);

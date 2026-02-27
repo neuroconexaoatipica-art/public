@@ -1,7 +1,349 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/SettingsPage.tsx",
-  "created_at": "2026-02-27T05:36:26.960Z",
-  "file_content": "/**\n * SettingsPage — Configuracoes do usuario\n * Controles de privacidade, visibilidade e modo recolhimento.\n */\n\nimport { useState, useEffect } from \"react\";\nimport { motion } from \"motion/react\";\nimport {\n  ArrowLeft, Shield, Eye, EyeOff, Bell, BellOff, Moon,\n  Globe, Lock, Save, Loader2, CheckCircle, LogOut, Trash2,\n  Heart, Brain, MessageCircle, User, Pen\n} from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\nimport { useProfileContext } from \"../../lib/ProfileContext\";\nimport { LogoIcon } from \"./LogoIcon\";\n\ninterface SettingsPageProps {\n  onBack: () => void;\n}\n\ninterface SettingsState {\n  is_public_profile: boolean;\n  is_anonymous_mode: boolean;\n  use_real_name: boolean;\n  neurodivergences_public: boolean;\n  deep_statement_public: boolean;\n  calming_statement_public: boolean;\n  allow_whatsapp: boolean;\n  allow_email: boolean;\n}\n\nexport function SettingsPage({ onBack }: SettingsPageProps) {\n  const { user, refreshProfile } = useProfileContext();\n  const [settings, setSettings] = useState<SettingsState>({\n    is_public_profile: true,\n    is_anonymous_mode: false,\n    use_real_name: false,\n    neurodivergences_public: false,\n    deep_statement_public: false,\n    calming_statement_public: false,\n    allow_whatsapp: false,\n    allow_email: false,\n  });\n  const [displayName, setDisplayName] = useState(\"\");\n  const [legalName, setLegalName] = useState(\"\");\n  const [saving, setSaving] = useState(false);\n  const [saved, setSaved] = useState(false);\n  const [hasChanges, setHasChanges] = useState(false);\n\n  // Carregar settings do user\n  useEffect(() => {\n    if (user) {\n      setSettings({\n        is_public_profile: user.is_public_profile ?? true,\n        is_anonymous_mode: user.is_anonymous_mode ?? false,\n        use_real_name: user.use_real_name ?? false,\n        neurodivergences_public: user.neurodivergences_public ?? false,\n        deep_statement_public: user.deep_statement_public ?? false,\n        calming_statement_public: user.calming_statement_public ?? false,\n        allow_whatsapp: user.allow_whatsapp ?? false,\n        allow_email: user.allow_email ?? false,\n      });\n      setDisplayName(user.display_name || \"\");\n      setLegalName(user.legal_name || \"\");\n    }\n  }, [user]);\n\n  const handleToggle = (key: keyof SettingsState) => {\n    setSettings(prev => ({ ...prev, [key]: !prev[key] }));\n    setHasChanges(true);\n    setSaved(false);\n  };\n\n  const handleSave = async () => {\n    if (!user) return;\n    setSaving(true);\n    try {\n      const { error } = await supabase\n        .from(\"users\")\n        .update({\n          ...settings,\n          display_name: displayName.trim() || user.name,\n          legal_name: legalName.trim() || null,\n        })\n        .eq(\"id\", user.id);\n\n      if (error) throw error;\n      await refreshProfile();\n      setSaved(true);\n      setHasChanges(false);\n      setTimeout(() => setSaved(false), 3000);\n    } catch (err) {\n      console.error(\"[SettingsPage] Erro ao salvar:\", err);\n    } finally {\n      setSaving(false);\n    }\n  };\n\n  const handleLogout = async () => {\n    await supabase.auth.signOut();\n  };\n\n  if (!user) return null;\n\n  const sections = [\n    {\n      title: \"Identidade\",\n      icon: User,\n      color: \"#81D8D0\",\n      type: \"identity\" as const,\n      toggles: [\n        {\n          key: \"use_real_name\" as keyof SettingsState,\n          label: \"Exibir nome real\",\n          description: \"Quando desligado, outros membros veem seu apelido (display name). Quando ligado, veem seu nome de cadastro.\",\n          iconOn: User,\n          iconOff: Pen,\n        },\n      ],\n    },\n    {\n      title: \"Privacidade do Perfil\",\n      icon: Shield,\n      color: \"#81D8D0\",\n      toggles: [\n        {\n          key: \"is_public_profile\" as keyof SettingsState,\n          label: \"Perfil publico\",\n          description: \"Membros podem encontrar e ver seu perfil\",\n          iconOn: Globe,\n          iconOff: Lock,\n        },\n        {\n          key: \"is_anonymous_mode\" as keyof SettingsState,\n          label: \"Modo recolhimento\",\n          description: \"Oculta seu nome em visitas e atividades recentes. Voce continua podendo participar normalmente.\",\n          iconOn: Moon,\n          iconOff: Eye,\n          inverted: true, // quando ON = recolhido\n        },\n      ],\n    },\n    {\n      title: \"Visibilidade de Informacoes\",\n      icon: Eye,\n      color: \"#FF6B35\",\n      toggles: [\n        {\n          key: \"neurodivergences_public\" as keyof SettingsState,\n          label: \"Mostrar neurodivergencias\",\n          description: \"Exibe suas neurodivergencias no perfil publico\",\n          iconOn: Brain,\n          iconOff: EyeOff,\n        },\n        {\n          key: \"deep_statement_public\" as keyof SettingsState,\n          label: \"Mostrar frase profunda\",\n          description: \"Exibe seu 'deep statement' no perfil\",\n          iconOn: Heart,\n          iconOff: EyeOff,\n        },\n        {\n          key: \"calming_statement_public\" as keyof SettingsState,\n          label: \"Mostrar frase de acolhimento\",\n          description: \"Exibe sua frase de acolhimento no perfil\",\n          iconOn: MessageCircle,\n          iconOff: EyeOff,\n        },\n      ],\n    },\n    {\n      title: \"Comunicacao\",\n      icon: Bell,\n      color: \"#C8102E\",\n      toggles: [\n        {\n          key: \"allow_whatsapp\" as keyof SettingsState,\n          label: \"Permitir contato por WhatsApp\",\n          description: \"Outros membros podem ver seu WhatsApp (somente membros aprovados)\",\n          iconOn: Bell,\n          iconOff: BellOff,\n        },\n        {\n          key: \"allow_email\" as keyof SettingsState,\n          label: \"Permitir contato por email\",\n          description: \"Receber comunicacoes da plataforma por email\",\n          iconOn: Bell,\n          iconOff: BellOff,\n        },\n      ],\n    },\n  ];\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Header */}\n      <div className=\"w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40\">\n        <div className=\"mx-auto max-w-[800px] px-6 py-4\">\n          <div className=\"flex items-center justify-between\">\n            <button onClick={onBack} className=\"flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors\">\n              <ArrowLeft className=\"h-5 w-5\" />\n              <span className=\"font-medium\">Voltar</span>\n            </button>\n            <div className=\"flex items-center gap-2\">\n              <LogoIcon size={28} className=\"h-7 w-7\" />\n              <h1 className=\"text-lg text-white font-semibold\">Configuracoes</h1>\n            </div>\n            <div className=\"w-20\" />\n          </div>\n        </div>\n      </div>\n\n      <div className=\"mx-auto max-w-[800px] px-6 py-8\">\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          animate={{ opacity: 1, y: 0 }}\n          className=\"space-y-6\"\n        >\n          {/* Secoes */}\n          {sections.map((section) => (\n            <div key={section.title} className=\"bg-white/5 border border-white/10 rounded-2xl p-6\">\n              <div className=\"flex items-center gap-3 mb-5\">\n                <div className=\"w-10 h-10 rounded-xl flex items-center justify-center\" style={{ backgroundColor: `${section.color}15`, border: `1px solid ${section.color}30` }}>\n                  <section.icon className=\"h-5 w-5\" style={{ color: section.color }} />\n                </div>\n                <h2 className=\"text-white font-bold\">{section.title}</h2>\n              </div>\n\n              <div className=\"space-y-4\">\n                {/* Campos de identidade (display_name + legal_name) */}\n                {'type' in section && section.type === 'identity' && (\n                  <div className=\"space-y-4 mb-4 pb-4 border-b border-white/10\">\n                    <div>\n                      <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                        Apelido / Display Name\n                      </label>\n                      <input\n                        type=\"text\"\n                        value={displayName}\n                        onChange={(e) => { setDisplayName(e.target.value); setHasChanges(true); setSaved(false); }}\n                        placeholder=\"Como voce quer ser chamado(a)\"\n                        maxLength={50}\n                        className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none\"\n                      />\n                      <p className=\"text-[10px] text-white/25 mt-1\">Este e o nome que outros membros veem. Se vazio, usa seu nome de cadastro.</p>\n                    </div>\n                    <div>\n                      <label className=\"text-xs text-white/60 font-semibold mb-2 block\">\n                        Nome legal <span className=\"text-white/25\">(privado, opcional)</span>\n                      </label>\n                      <input\n                        type=\"text\"\n                        value={legalName}\n                        onChange={(e) => { setLegalName(e.target.value); setHasChanges(true); setSaved(false); }}\n                        placeholder=\"Seu nome completo real (somente a fundadora ve)\"\n                        maxLength={100}\n                        className=\"w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none\"\n                      />\n                      <p className=\"text-[10px] text-white/25 mt-1\">\n                        Nunca sera exibido publicamente. Apenas a fundadora (Mila) pode ver para fins administrativos.\n                      </p>\n                    </div>\n                  </div>\n                )}\n\n                {section.toggles.map((toggle) => {\n                  const value = toggle.inverted ? settings[toggle.key] : settings[toggle.key];\n                  const displayOn = toggle.inverted ? !value : value;\n                  const OnIcon = toggle.iconOn;\n                  const OffIcon = toggle.iconOff;\n\n                  return (\n                    <div key={toggle.key} className=\"flex items-center justify-between gap-4\">\n                      <div className=\"flex items-start gap-3 flex-1\">\n                        <div className=\"mt-0.5\">\n                          {displayOn ? (\n                            <OnIcon className=\"h-4 w-4 text-white/40\" />\n                          ) : (\n                            <OffIcon className=\"h-4 w-4 text-white/20\" />\n                          )}\n                        </div>\n                        <div>\n                          <p className=\"text-sm text-white font-medium\">{toggle.label}</p>\n                          <p className=\"text-xs text-white/40 mt-0.5 leading-relaxed\">{toggle.description}</p>\n                        </div>\n                      </div>\n\n                      {/* Toggle switch */}\n                      <button\n                        onClick={() => handleToggle(toggle.key)}\n                        className={`relative w-12 h-7 rounded-full transition-all duration-300 flex-shrink-0 ${\n                          value\n                            ? \"bg-[#81D8D0]\"\n                            : \"bg-white/15\"\n                        }`}\n                      >\n                        <motion.div\n                          animate={{ x: value ? 20 : 2 }}\n                          transition={{ type: \"spring\", stiffness: 500, damping: 30 }}\n                          className=\"absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm\"\n                        />\n                      </button>\n                    </div>\n                  );\n                })}\n              </div>\n            </div>\n          ))}\n\n          {/* Salvar */}\n          <div className=\"flex items-center gap-3\">\n            <button\n              onClick={handleSave}\n              disabled={!hasChanges || saving}\n              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold transition-all ${\n                hasChanges\n                  ? \"bg-[#81D8D0] text-black hover:bg-[#81D8D0]/90\"\n                  : \"bg-white/10 text-white/30 cursor-not-allowed\"\n              }`}\n            >\n              {saving ? (\n                <Loader2 className=\"h-4 w-4 animate-spin\" />\n              ) : saved ? (\n                <CheckCircle className=\"h-4 w-4\" />\n              ) : (\n                <Save className=\"h-4 w-4\" />\n              )}\n              {saving ? \"Salvando...\" : saved ? \"Salvo!\" : hasChanges ? \"Salvar alteracoes\" : \"Sem alteracoes\"}\n            </button>\n          </div>\n\n          {/* Acoes da conta */}\n          <div className=\"bg-white/5 border border-white/10 rounded-2xl p-6\">\n            <h2 className=\"text-white font-bold mb-4\">Conta</h2>\n            <div className=\"space-y-3\">\n              <button\n                onClick={handleLogout}\n                className=\"w-full flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white/60 hover:text-white transition-all text-left\"\n              >\n                <LogOut className=\"h-4 w-4\" />\n                <span className=\"text-sm font-medium\">Sair da conta</span>\n              </button>\n            </div>\n          </div>\n        </motion.div>\n      </div>\n    </div>\n  );\n}"
+/**
+ * SettingsPage — Configuracoes do usuario
+ * Controles de privacidade, visibilidade e modo recolhimento.
+ */
+
+import { useState, useEffect } from "react";
+import { motion } from "motion/react";
+import {
+  ArrowLeft, Shield, Eye, EyeOff, Bell, BellOff, Moon,
+  Globe, Lock, Save, Loader2, CheckCircle, LogOut, Trash2,
+  Heart, Brain, MessageCircle, User, Pen
+} from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useProfileContext } from "../../lib/ProfileContext";
+import { LogoIcon } from "./LogoIcon";
+
+interface SettingsPageProps {
+  onBack: () => void;
+}
+
+interface SettingsState {
+  is_public_profile: boolean;
+  is_anonymous_mode: boolean;
+  use_real_name: boolean;
+  neurodivergences_public: boolean;
+  deep_statement_public: boolean;
+  calming_statement_public: boolean;
+  allow_whatsapp: boolean;
+  allow_email: boolean;
+}
+
+export function SettingsPage({ onBack }: SettingsPageProps) {
+  const { user, refreshProfile } = useProfileContext();
+  const [settings, setSettings] = useState<SettingsState>({
+    is_public_profile: true,
+    is_anonymous_mode: false,
+    use_real_name: false,
+    neurodivergences_public: false,
+    deep_statement_public: false,
+    calming_statement_public: false,
+    allow_whatsapp: false,
+    allow_email: false,
+  });
+  const [displayName, setDisplayName] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Carregar settings do user
+  useEffect(() => {
+    if (user) {
+      setSettings({
+        is_public_profile: user.is_public_profile ?? true,
+        is_anonymous_mode: user.is_anonymous_mode ?? false,
+        use_real_name: user.use_real_name ?? false,
+        neurodivergences_public: user.neurodivergences_public ?? false,
+        deep_statement_public: user.deep_statement_public ?? false,
+        calming_statement_public: user.calming_statement_public ?? false,
+        allow_whatsapp: user.allow_whatsapp ?? false,
+        allow_email: user.allow_email ?? false,
+      });
+      setDisplayName(user.display_name || "");
+      setLegalName(user.legal_name || "");
+    }
+  }, [user]);
+
+  const handleToggle = (key: keyof SettingsState) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    setHasChanges(true);
+    setSaved(false);
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({
+          ...settings,
+          display_name: displayName.trim() || user.name,
+          legal_name: legalName.trim() || null,
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+      await refreshProfile();
+      setSaved(true);
+      setHasChanges(false);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error("[SettingsPage] Erro ao salvar:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (!user) return null;
+
+  const sections = [
+    {
+      title: "Identidade",
+      icon: User,
+      color: "#81D8D0",
+      type: "identity" as const,
+      toggles: [
+        {
+          key: "use_real_name" as keyof SettingsState,
+          label: "Exibir nome real",
+          description: "Quando desligado, outros membros veem seu apelido (display name). Quando ligado, veem seu nome de cadastro.",
+          iconOn: User,
+          iconOff: Pen,
+        },
+      ],
+    },
+    {
+      title: "Privacidade do Perfil",
+      icon: Shield,
+      color: "#81D8D0",
+      toggles: [
+        {
+          key: "is_public_profile" as keyof SettingsState,
+          label: "Perfil publico",
+          description: "Membros podem encontrar e ver seu perfil",
+          iconOn: Globe,
+          iconOff: Lock,
+        },
+        {
+          key: "is_anonymous_mode" as keyof SettingsState,
+          label: "Modo recolhimento",
+          description: "Oculta seu nome em visitas e atividades recentes. Voce continua podendo participar normalmente.",
+          iconOn: Moon,
+          iconOff: Eye,
+          inverted: true, // quando ON = recolhido
+        },
+      ],
+    },
+    {
+      title: "Visibilidade de Informacoes",
+      icon: Eye,
+      color: "#FF6B35",
+      toggles: [
+        {
+          key: "neurodivergences_public" as keyof SettingsState,
+          label: "Mostrar neurodivergencias",
+          description: "Exibe suas neurodivergencias no perfil publico",
+          iconOn: Brain,
+          iconOff: EyeOff,
+        },
+        {
+          key: "deep_statement_public" as keyof SettingsState,
+          label: "Mostrar frase profunda",
+          description: "Exibe seu 'deep statement' no perfil",
+          iconOn: Heart,
+          iconOff: EyeOff,
+        },
+        {
+          key: "calming_statement_public" as keyof SettingsState,
+          label: "Mostrar frase de acolhimento",
+          description: "Exibe sua frase de acolhimento no perfil",
+          iconOn: MessageCircle,
+          iconOff: EyeOff,
+        },
+      ],
+    },
+    {
+      title: "Comunicacao",
+      icon: Bell,
+      color: "#C8102E",
+      toggles: [
+        {
+          key: "allow_whatsapp" as keyof SettingsState,
+          label: "Permitir contato por WhatsApp",
+          description: "Outros membros podem ver seu WhatsApp (somente membros aprovados)",
+          iconOn: Bell,
+          iconOff: BellOff,
+        },
+        {
+          key: "allow_email" as keyof SettingsState,
+          label: "Permitir contato por email",
+          description: "Receber comunicacoes da plataforma por email",
+          iconOn: Bell,
+          iconOff: BellOff,
+        },
+      ],
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <div className="w-full bg-[#35363A] border-b border-white/10 sticky top-0 z-40">
+        <div className="mx-auto max-w-[800px] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <button onClick={onBack} className="flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+              <span className="font-medium">Voltar</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <LogoIcon size={28} className="h-7 w-7" />
+              <h1 className="text-lg text-white font-semibold">Configuracoes</h1>
+            </div>
+            <div className="w-20" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-[800px] px-6 py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Secoes */}
+          {sections.map((section) => (
+            <div key={section.title} className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${section.color}15`, border: `1px solid ${section.color}30` }}>
+                  <section.icon className="h-5 w-5" style={{ color: section.color }} />
+                </div>
+                <h2 className="text-white font-bold">{section.title}</h2>
+              </div>
+
+              <div className="space-y-4">
+                {/* Campos de identidade (display_name + legal_name) */}
+                {'type' in section && section.type === 'identity' && (
+                  <div className="space-y-4 mb-4 pb-4 border-b border-white/10">
+                    <div>
+                      <label className="text-xs text-white/60 font-semibold mb-2 block">
+                        Apelido / Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={displayName}
+                        onChange={(e) => { setDisplayName(e.target.value); setHasChanges(true); setSaved(false); }}
+                        placeholder="Como voce quer ser chamado(a)"
+                        maxLength={50}
+                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none"
+                      />
+                      <p className="text-[10px] text-white/25 mt-1">Este e o nome que outros membros veem. Se vazio, usa seu nome de cadastro.</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/60 font-semibold mb-2 block">
+                        Nome legal <span className="text-white/25">(privado, opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={legalName}
+                        onChange={(e) => { setLegalName(e.target.value); setHasChanges(true); setSaved(false); }}
+                        placeholder="Seu nome completo real (somente a fundadora ve)"
+                        maxLength={100}
+                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/25 focus:border-[#81D8D0]/50 focus:outline-none"
+                      />
+                      <p className="text-[10px] text-white/25 mt-1">
+                        Nunca sera exibido publicamente. Apenas a fundadora (Mila) pode ver para fins administrativos.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {section.toggles.map((toggle) => {
+                  const value = toggle.inverted ? settings[toggle.key] : settings[toggle.key];
+                  const displayOn = toggle.inverted ? !value : value;
+                  const OnIcon = toggle.iconOn;
+                  const OffIcon = toggle.iconOff;
+
+                  return (
+                    <div key={toggle.key} className="flex items-center justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="mt-0.5">
+                          {displayOn ? (
+                            <OnIcon className="h-4 w-4 text-white/40" />
+                          ) : (
+                            <OffIcon className="h-4 w-4 text-white/20" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm text-white font-medium">{toggle.label}</p>
+                          <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{toggle.description}</p>
+                        </div>
+                      </div>
+
+                      {/* Toggle switch */}
+                      <button
+                        onClick={() => handleToggle(toggle.key)}
+                        className={`relative w-12 h-7 rounded-full transition-all duration-300 flex-shrink-0 ${
+                          value
+                            ? "bg-[#81D8D0]"
+                            : "bg-white/15"
+                        }`}
+                      >
+                        <motion.div
+                          animate={{ x: value ? 20 : 2 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          className="absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm"
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Salvar */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold transition-all ${
+                hasChanges
+                  ? "bg-[#81D8D0] text-black hover:bg-[#81D8D0]/90"
+                  : "bg-white/10 text-white/30 cursor-not-allowed"
+              }`}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : saved ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saving ? "Salvando..." : saved ? "Salvo!" : hasChanges ? "Salvar alteracoes" : "Sem alteracoes"}
+            </button>
+          </div>
+
+          {/* Acoes da conta */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+            <h2 className="text-white font-bold mb-4">Conta</h2>
+            <div className="space-y-3">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white/60 hover:text-white transition-all text-left"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="text-sm font-medium">Sair da conta</span>
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
 }

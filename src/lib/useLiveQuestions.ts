@@ -1,7 +1,188 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useLiveQuestions.ts",
-  "created_at": "2026-02-27T05:36:06.025Z",
-  "file_content": "/**\n * useLiveQuestions — Hook para perguntas antecipadas de lives\n * v1.1: Suporta anonimato, sensibilidade, selecao por founder\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase, TIMEOUTS } from './supabase';\nimport { RATE_LIMITS, cleanTextInput, MAX_LENGTHS } from './security';\n\nexport interface LiveQuestion {\n  id: string;\n  event_id: string;\n  user_id: string;\n  question_text: string;\n  anonymous: boolean;\n  is_sensitive: boolean;\n  is_selected: boolean;\n  is_highlighted: boolean;\n  priority_score: number;\n  answered_live: boolean;\n  answer_summary: string | null;\n  created_at: string;\n  // Joined\n  author_name?: string;\n  author_photo?: string;\n}\n\nexport function useLiveQuestions(eventId: string | null) {\n  const [questions, setQuestions] = useState<LiveQuestion[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  const loadQuestions = useCallback(async () => {\n    if (!eventId) return;\n    setIsLoading(true);\n    setError(null);\n\n    try {\n      const { data, error: fetchError } = await supabase\n        .from('live_questions')\n        .select(`\n          *,\n          users:user_id (name, display_name, profile_photo)\n        `)\n        .eq('event_id', eventId)\n        .order('priority_score', { ascending: false })\n        .order('created_at', { ascending: true })\n        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n      if (fetchError) throw fetchError;\n\n      const mapped: LiveQuestion[] = (data || []).map((q: any) => ({\n        ...q,\n        author_name: q.anonymous ? 'Anonimo' : (q.users?.display_name || q.users?.name || 'Membro'),\n        author_photo: q.anonymous ? null : q.users?.profile_photo,\n      }));\n\n      setQuestions(mapped);\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao carregar:', err);\n      setError(err.message || 'Erro ao carregar perguntas');\n    } finally {\n      setIsLoading(false);\n    }\n  }, [eventId]);\n\n  useEffect(() => {\n    loadQuestions();\n  }, [loadQuestions]);\n\n  /** Enviar nova pergunta */\n  const submitQuestion = useCallback(async (\n    questionText: string,\n    anonymous: boolean = false,\n    isSensitive: boolean = false\n  ): Promise<{ success: boolean; error?: string }> => {\n    if (!eventId) return { success: false, error: 'Evento nao encontrado' };\n\n    // Rate limit local\n    const rateCheck = RATE_LIMITS.LIVE_QUESTION(eventId);\n    if (!rateCheck.allowed) {\n      return { success: false, error: `Limite de perguntas atingido. Tente novamente em ${Math.ceil(rateCheck.retryAfterMs / 1000)}s` };\n    }\n\n    const cleaned = cleanTextInput(questionText, MAX_LENGTHS.QUESTION_TEXT);\n    if (!cleaned || cleaned.length < 5) {\n      return { success: false, error: 'Pergunta muito curta (minimo 5 caracteres)' };\n    }\n\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Voce precisa estar logado' };\n\n      const { error: insertError } = await supabase\n        .from('live_questions')\n        .insert({\n          event_id: eventId,\n          user_id: user.id,\n          question_text: cleaned,\n          anonymous,\n          is_sensitive: isSensitive,\n        });\n\n      if (insertError) throw insertError;\n\n      await loadQuestions();\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao enviar:', err);\n      return { success: false, error: err.message || 'Erro ao enviar pergunta' };\n    }\n  }, [eventId, loadQuestions]);\n\n  /** Selecionar pergunta (founder/moderador) */\n  const selectQuestion = useCallback(async (questionId: string, selected: boolean) => {\n    try {\n      const { error: updateError } = await supabase\n        .from('live_questions')\n        .update({ is_selected: selected })\n        .eq('id', questionId);\n\n      if (updateError) throw updateError;\n      await loadQuestions();\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao selecionar:', err);\n    }\n  }, [loadQuestions]);\n\n  /** Marcar como respondida ao vivo */\n  const markAnswered = useCallback(async (questionId: string, summary?: string) => {\n    try {\n      const { error: updateError } = await supabase\n        .from('live_questions')\n        .update({\n          answered_live: true,\n          answer_summary: summary || null,\n        })\n        .eq('id', questionId);\n\n      if (updateError) throw updateError;\n      await loadQuestions();\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao marcar respondida:', err);\n    }\n  }, [loadQuestions]);\n\n  /** Atualizar prioridade */\n  const setPriority = useCallback(async (questionId: string, score: number) => {\n    try {\n      await supabase\n        .from('live_questions')\n        .update({ priority_score: score })\n        .eq('id', questionId);\n      await loadQuestions();\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao definir prioridade:', err);\n    }\n  }, [loadQuestions]);\n\n  /** Deletar pergunta propria */\n  const deleteQuestion = useCallback(async (questionId: string) => {\n    try {\n      await supabase\n        .from('live_questions')\n        .delete()\n        .eq('id', questionId);\n      await loadQuestions();\n    } catch (err: any) {\n      console.error('[useLiveQuestions] Erro ao deletar:', err);\n    }\n  }, [loadQuestions]);\n\n  return {\n    questions,\n    isLoading,\n    error,\n    submitQuestion,\n    selectQuestion,\n    markAnswered,\n    setPriority,\n    deleteQuestion,\n    refreshQuestions: loadQuestions,\n    // Computed\n    selectedQuestions: questions.filter(q => q.is_selected),\n    answeredQuestions: questions.filter(q => q.answered_live),\n    pendingQuestions: questions.filter(q => !q.answered_live && !q.is_selected),\n  };\n}\n"
+/**
+ * useLiveQuestions — Hook para perguntas antecipadas de lives
+ * v1.1: Suporta anonimato, sensibilidade, selecao por founder
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, TIMEOUTS } from './supabase';
+import { RATE_LIMITS, cleanTextInput, MAX_LENGTHS } from './security';
+
+export interface LiveQuestion {
+  id: string;
+  event_id: string;
+  user_id: string;
+  question_text: string;
+  anonymous: boolean;
+  is_sensitive: boolean;
+  is_selected: boolean;
+  is_highlighted: boolean;
+  priority_score: number;
+  answered_live: boolean;
+  answer_summary: string | null;
+  created_at: string;
+  // Joined
+  author_name?: string;
+  author_photo?: string;
+}
+
+export function useLiveQuestions(eventId: string | null) {
+  const [questions, setQuestions] = useState<LiveQuestion[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadQuestions = useCallback(async () => {
+    if (!eventId) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('live_questions')
+        .select(`
+          *,
+          users:user_id (name, display_name, profile_photo)
+        `)
+        .eq('event_id', eventId)
+        .order('priority_score', { ascending: false })
+        .order('created_at', { ascending: true })
+        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+      if (fetchError) throw fetchError;
+
+      const mapped: LiveQuestion[] = (data || []).map((q: any) => ({
+        ...q,
+        author_name: q.anonymous ? 'Anonimo' : (q.users?.display_name || q.users?.name || 'Membro'),
+        author_photo: q.anonymous ? null : q.users?.profile_photo,
+      }));
+
+      setQuestions(mapped);
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao carregar:', err);
+      setError(err.message || 'Erro ao carregar perguntas');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    loadQuestions();
+  }, [loadQuestions]);
+
+  /** Enviar nova pergunta */
+  const submitQuestion = useCallback(async (
+    questionText: string,
+    anonymous: boolean = false,
+    isSensitive: boolean = false
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!eventId) return { success: false, error: 'Evento nao encontrado' };
+
+    // Rate limit local
+    const rateCheck = RATE_LIMITS.LIVE_QUESTION(eventId);
+    if (!rateCheck.allowed) {
+      return { success: false, error: `Limite de perguntas atingido. Tente novamente em ${Math.ceil(rateCheck.retryAfterMs / 1000)}s` };
+    }
+
+    const cleaned = cleanTextInput(questionText, MAX_LENGTHS.QUESTION_TEXT);
+    if (!cleaned || cleaned.length < 5) {
+      return { success: false, error: 'Pergunta muito curta (minimo 5 caracteres)' };
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Voce precisa estar logado' };
+
+      const { error: insertError } = await supabase
+        .from('live_questions')
+        .insert({
+          event_id: eventId,
+          user_id: user.id,
+          question_text: cleaned,
+          anonymous,
+          is_sensitive: isSensitive,
+        });
+
+      if (insertError) throw insertError;
+
+      await loadQuestions();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao enviar:', err);
+      return { success: false, error: err.message || 'Erro ao enviar pergunta' };
+    }
+  }, [eventId, loadQuestions]);
+
+  /** Selecionar pergunta (founder/moderador) */
+  const selectQuestion = useCallback(async (questionId: string, selected: boolean) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('live_questions')
+        .update({ is_selected: selected })
+        .eq('id', questionId);
+
+      if (updateError) throw updateError;
+      await loadQuestions();
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao selecionar:', err);
+    }
+  }, [loadQuestions]);
+
+  /** Marcar como respondida ao vivo */
+  const markAnswered = useCallback(async (questionId: string, summary?: string) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('live_questions')
+        .update({
+          answered_live: true,
+          answer_summary: summary || null,
+        })
+        .eq('id', questionId);
+
+      if (updateError) throw updateError;
+      await loadQuestions();
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao marcar respondida:', err);
+    }
+  }, [loadQuestions]);
+
+  /** Atualizar prioridade */
+  const setPriority = useCallback(async (questionId: string, score: number) => {
+    try {
+      await supabase
+        .from('live_questions')
+        .update({ priority_score: score })
+        .eq('id', questionId);
+      await loadQuestions();
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao definir prioridade:', err);
+    }
+  }, [loadQuestions]);
+
+  /** Deletar pergunta propria */
+  const deleteQuestion = useCallback(async (questionId: string) => {
+    try {
+      await supabase
+        .from('live_questions')
+        .delete()
+        .eq('id', questionId);
+      await loadQuestions();
+    } catch (err: any) {
+      console.error('[useLiveQuestions] Erro ao deletar:', err);
+    }
+  }, [loadQuestions]);
+
+  return {
+    questions,
+    isLoading,
+    error,
+    submitQuestion,
+    selectQuestion,
+    markAnswered,
+    setPriority,
+    deleteQuestion,
+    refreshQuestions: loadQuestions,
+    // Computed
+    selectedQuestions: questions.filter(q => q.is_selected),
+    answeredQuestions: questions.filter(q => q.answered_live),
+    pendingQuestions: questions.filter(q => !q.answered_live && !q.is_selected),
+  };
 }

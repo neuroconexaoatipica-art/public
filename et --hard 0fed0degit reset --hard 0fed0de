@@ -1,7 +1,0 @@
-[33m8726da0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m deploy v4 KV fix
-[33m0fed0de[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: todos os componentes funcionais implementados (20 arquivos)
-[33mfa20bdd[m feat: add pull-code.mjs (Ponte Supabase)
-[33m4575272[m fix: remove duplicate src/lib/src folder and fix ChatMessage cast
-[33m1d5eef0[m[33m ([m[1;31morigin/feature/orkut-territory-architecture[m[33m, [m[1;32mfeature/orkut-territory-architecture[m[33m)[m fix: useConnections com cancelRequest + imports limpos ConnectionButton + ProfileMila integrado (visitas, conexoes, reconhecimentos)
-[33ma57ea8c[m feat: landing page completa
-[33m2036221[m fix: ClaritySection props type

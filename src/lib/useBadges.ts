@@ -1,7 +1,373 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useBadges.ts",
-  "created_at": "2026-02-27T05:36:03.058Z",
-  "file_content": "/**\n * useBadges — Hook para badges visuais de status\n * v1.2: Badges de pertencimento, reconhecimento + motor de concessao automatica\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase, TIMEOUTS } from './supabase';\n\nexport type BadgeType =\n  | 'nucleo_inicial'\n  | 'trinta_primeiros'\n  | 'vitalicio'\n  | 'founder'\n  | 'coordenador_territorial'\n  | 'constancia_ritual'\n  | 'presenca_territorial'\n  | 'lideranca'\n  | 'presenca';\n\nexport interface UserBadge {\n  id: string;\n  user_id: string;\n  badge_type: BadgeType;\n  earned_at: string;\n  is_active: boolean;\n}\n\n/** Configuracao visual de cada badge */\nexport const BADGE_CONFIG: Record<BadgeType, {\n  label: string;\n  emoji: string;\n  color: string;\n  bgColor: string;\n  description: string;\n}> = {\n  nucleo_inicial: {\n    label: 'Nucleo Inicial',\n    emoji: '\\u2B50', // estrela\n    color: '#FFD700',\n    bgColor: 'rgba(255, 215, 0, 0.15)',\n    description: 'Membro desde o inicio da plataforma',\n  },\n  trinta_primeiros: {\n    label: '30 Primeiros',\n    emoji: '\\uD83C\\uDFC6', // trofeu\n    color: '#FF6B35',\n    bgColor: 'rgba(255, 107, 53, 0.15)',\n    description: 'Entre os 30 primeiros membros',\n  },\n  vitalicio: {\n    label: 'Vitalicio',\n    emoji: '\\u267E\\uFE0F', // infinito\n    color: '#81D8D0',\n    bgColor: 'rgba(129, 216, 208, 0.15)',\n    description: 'Acesso vitalicio gratuito',\n  },\n  founder: {\n    label: 'Founder',\n    emoji: '\\uD83D\\uDC51', // coroa\n    color: '#C8102E',\n    bgColor: 'rgba(200, 16, 46, 0.15)',\n    description: 'Fundador(a) de comunidade',\n  },\n  coordenador_territorial: {\n    label: 'Coordenador',\n    emoji: '\\uD83C\\uDF0D', // globo\n    color: '#FF6B35',\n    bgColor: 'rgba(255, 107, 53, 0.15)',\n    description: 'Coordenador(a) de nucleo territorial',\n  },\n  constancia_ritual: {\n    label: 'Constancia',\n    emoji: '\\uD83D\\uDD25', // fogo\n    color: '#FF4500',\n    bgColor: 'rgba(255, 69, 0, 0.15)',\n    description: '4+ semanas consecutivas de rituais',\n  },\n  presenca_territorial: {\n    label: 'Territorio',\n    emoji: '\\uD83D\\uDCCD', // pin\n    color: '#FF6B35',\n    bgColor: 'rgba(255, 107, 53, 0.15)',\n    description: '3+ encontros presenciais',\n  },\n  lideranca: {\n    label: 'Lideranca',\n    emoji: '\\uD83C\\uDF1F', // estrela brilhante\n    color: '#A855F7',\n    bgColor: 'rgba(168, 85, 247, 0.15)',\n    description: 'Organizou 1+ live ou evento',\n  },\n  presenca: {\n    label: 'Presenca',\n    emoji: '\\uD83D\\uDCAC', // balao\n    color: '#81D8D0',\n    bgColor: 'rgba(129, 216, 208, 0.15)',\n    description: '10+ comentarios relevantes',\n  },\n};\n\nexport function useBadges(userId?: string) {\n  const [badges, setBadges] = useState<UserBadge[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n\n  const loadBadges = useCallback(async () => {\n    if (!userId) return;\n    setIsLoading(true);\n\n    try {\n      const { data, error } = await supabase\n        .from('user_badges')\n        .select('*')\n        .eq('user_id', userId)\n        .eq('is_active', true)\n        .order('earned_at', { ascending: true })\n        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n      if (error) throw error;\n      setBadges((data || []) as UserBadge[]);\n    } catch (err) {\n      console.error('[useBadges] Erro ao carregar:', err);\n      // Silencioso — badges nao sao criticas\n    } finally {\n      setIsLoading(false);\n    }\n  }, [userId]);\n\n  useEffect(() => {\n    loadBadges();\n  }, [loadBadges]);\n\n  /** Verificar se usuario tem um badge especifico */\n  const hasBadge = useCallback((type: BadgeType): boolean => {\n    return badges.some(b => b.badge_type === type);\n  }, [badges]);\n\n  /** Obter config visual de um badge */\n  const getBadgeConfig = (type: BadgeType) => BADGE_CONFIG[type];\n\n  return {\n    badges,\n    isLoading,\n    hasBadge,\n    getBadgeConfig,\n    refreshBadges: loadBadges,\n    badgeCount: badges.length,\n  };\n}\n\n/** Hook para carregar badges de multiplos usuarios (para listas) */\nexport function useBadgesForUsers(userIds: string[]) {\n  const [badgeMap, setBadgeMap] = useState<Record<string, UserBadge[]>>({});\n  const [isLoading, setIsLoading] = useState(false);\n\n  useEffect(() => {\n    if (userIds.length === 0) return;\n\n    const load = async () => {\n      setIsLoading(true);\n      try {\n        const { data, error } = await supabase\n          .from('user_badges')\n          .select('*')\n          .in('user_id', userIds)\n          .eq('is_active', true)\n          .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n        if (error) throw error;\n\n        const map: Record<string, UserBadge[]> = {};\n        (data || []).forEach((badge: any) => {\n          if (!map[badge.user_id]) map[badge.user_id] = [];\n          map[badge.user_id].push(badge as UserBadge);\n        });\n        setBadgeMap(map);\n      } catch (err) {\n        console.error('[useBadgesForUsers] Erro:', err);\n      } finally {\n        setIsLoading(false);\n      }\n    };\n\n    load();\n  }, [userIds.join(',')]);\n\n  return { badgeMap, isLoading };\n}\n\n// ═══════════════════════════════════════════════════════════\n// MOTOR DE CONCESSÃO AUTOMÁTICA — Gamificação Invisível\n// Verifica condições e concede selos silenciosamente.\n// ═══════════════════════════════════════════════════════════\n\ninterface BadgeEligibility {\n  type: BadgeType;\n  eligible: boolean;\n  reason: string;\n}\n\n/** Conceder badge se ainda nao possui (idempotente) */\nasync function grantBadgeIfNew(userId: string, badgeType: BadgeType): Promise<boolean> {\n  try {\n    // Verificar se ja tem\n    const { data: existing } = await supabase\n      .from('user_badges')\n      .select('id')\n      .eq('user_id', userId)\n      .eq('badge_type', badgeType)\n      .limit(1);\n\n    if (existing && existing.length > 0) return false; // Ja possui\n\n    const { error } = await supabase\n      .from('user_badges')\n      .insert({\n        user_id: userId,\n        badge_type: badgeType,\n        earned_at: new Date().toISOString(),\n        is_active: true,\n      });\n\n    if (error) {\n      // Conflito de unique = ja existe, tudo bem\n      if (error.code === '23505') return false;\n      throw error;\n    }\n\n    console.log(`[useBadges] Selo concedido: ${badgeType} para ${userId}`);\n    return true;\n  } catch (err) {\n    console.error(`[useBadges] Erro ao conceder ${badgeType}:`, err);\n    return false;\n  }\n}\n\n/** Verificar elegibilidade para TODOS os selos de gamificacao */\nasync function checkAllEligibility(userId: string): Promise<BadgeEligibility[]> {\n  const results: BadgeEligibility[] = [];\n\n  try {\n    // ── 1. SELO CONSTÂNCIA: 4+ semanas consecutivas de rituais ──\n    const { data: ritualLogs } = await supabase\n      .from('ritual_logs')\n      .select('completed_at')\n      .eq('user_id', userId)\n      .order('completed_at', { ascending: false });\n\n    if (ritualLogs && ritualLogs.length > 0) {\n      // Agrupar por semana ISO\n      const weekSet = new Set<string>();\n      ritualLogs.forEach((log: any) => {\n        const d = new Date(log.completed_at);\n        const yearWeek = `${d.getFullYear()}-W${String(getISOWeek(d)).padStart(2, '0')}`;\n        weekSet.add(yearWeek);\n      });\n\n      // Contar semanas consecutivas a partir da mais recente\n      const sortedWeeks = Array.from(weekSet).sort().reverse();\n      let consecutive = 1;\n      for (let i = 1; i < sortedWeeks.length; i++) {\n        if (areConsecutiveWeeks(sortedWeeks[i - 1], sortedWeeks[i])) {\n          consecutive++;\n        } else break;\n      }\n\n      results.push({\n        type: 'constancia_ritual',\n        eligible: consecutive >= 4,\n        reason: `${consecutive} semanas consecutivas de rituais`,\n      });\n    } else {\n      results.push({ type: 'constancia_ritual', eligible: false, reason: '0 rituais registrados' });\n    }\n\n    // ── 2. SELO TERRITÓRIO: 3+ encontros presenciais ──\n    const { data: eventAttendance } = await supabase\n      .from('event_attendees')\n      .select('id, event:event_id (event_type)')\n      .eq('user_id', userId)\n      .eq('status', 'confirmed');\n\n    const presencialCount = (eventAttendance || []).filter(\n      (a: any) => a.event?.event_type === 'presencial' || a.event?.event_type === 'hibrido'\n    ).length;\n\n    results.push({\n      type: 'presenca_territorial',\n      eligible: presencialCount >= 3,\n      reason: `${presencialCount} encontros presenciais`,\n    });\n\n    // ── 3. SELO LIDERANÇA: 1+ live ou evento organizado ──\n    const { data: organizedEvents } = await supabase\n      .from('events')\n      .select('id')\n      .eq('host_id', userId)\n      .limit(1);\n\n    const { data: organizedLives } = await supabase\n      .from('lives')\n      .select('id')\n      .eq('host_id', userId)\n      .limit(1);\n\n    const hasOrganized = ((organizedEvents?.length || 0) + (organizedLives?.length || 0)) >= 1;\n\n    results.push({\n      type: 'lideranca',\n      eligible: hasOrganized,\n      reason: hasOrganized ? 'Organizou evento ou live' : 'Nenhum evento ou live organizado',\n    });\n\n    // ── 4. SELO PRESENÇA: 10+ comentários ──\n    const { count: commentCount } = await supabase\n      .from('comments')\n      .select('*', { count: 'exact', head: true })\n      .eq('author', userId);\n\n    results.push({\n      type: 'presenca',\n      eligible: (commentCount || 0) >= 10,\n      reason: `${commentCount || 0} comentarios`,\n    });\n\n  } catch (err) {\n    console.error('[useBadges] Erro ao verificar elegibilidade:', err);\n  }\n\n  return results;\n}\n\n/** Executar verificacao completa e conceder selos automaticamente */\nexport async function runBadgeEngine(userId: string): Promise<{ granted: BadgeType[] }> {\n  const granted: BadgeType[] = [];\n\n  try {\n    const eligibility = await checkAllEligibility(userId);\n\n    for (const check of eligibility) {\n      if (check.eligible) {\n        const wasNew = await grantBadgeIfNew(userId, check.type);\n        if (wasNew) granted.push(check.type);\n      }\n    }\n\n    if (granted.length > 0) {\n      console.log(`[useBadges] Selos concedidos para ${userId}:`, granted);\n    }\n  } catch (err) {\n    console.error('[useBadges] Erro no motor de badges:', err);\n  }\n\n  return { granted };\n}\n\n// ── Utilitarios de semana ISO ──\n\nfunction getISOWeek(date: Date): number {\n  const d = new Date(date.getTime());\n  d.setHours(0, 0, 0, 0);\n  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));\n  const week1 = new Date(d.getFullYear(), 0, 4);\n  return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);\n}\n\nfunction areConsecutiveWeeks(newer: string, older: string): boolean {\n  // formato: \"2026-W09\", \"2026-W08\"\n  const [yN, wN] = newer.split('-W').map(Number);\n  const [yO, wO] = older.split('-W').map(Number);\n  if (yN === yO) return wN - wO === 1;\n  if (yN - yO === 1 && wO >= 52 && wN === 1) return true;\n  return false;\n}"
+/**
+ * useBadges — Hook para badges visuais de status
+ * v1.2: Badges de pertencimento, reconhecimento + motor de concessao automatica
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, TIMEOUTS } from './supabase';
+
+export type BadgeType =
+  | 'nucleo_inicial'
+  | 'trinta_primeiros'
+  | 'vitalicio'
+  | 'founder'
+  | 'coordenador_territorial'
+  | 'constancia_ritual'
+  | 'presenca_territorial'
+  | 'lideranca'
+  | 'presenca';
+
+export interface UserBadge {
+  id: string;
+  user_id: string;
+  badge_type: BadgeType;
+  earned_at: string;
+  is_active: boolean;
+}
+
+/** Configuracao visual de cada badge */
+export const BADGE_CONFIG: Record<BadgeType, {
+  label: string;
+  emoji: string;
+  color: string;
+  bgColor: string;
+  description: string;
+}> = {
+  nucleo_inicial: {
+    label: 'Nucleo Inicial',
+    emoji: '\u2B50', // estrela
+    color: '#FFD700',
+    bgColor: 'rgba(255, 215, 0, 0.15)',
+    description: 'Membro desde o inicio da plataforma',
+  },
+  trinta_primeiros: {
+    label: '30 Primeiros',
+    emoji: '\uD83C\uDFC6', // trofeu
+    color: '#FF6B35',
+    bgColor: 'rgba(255, 107, 53, 0.15)',
+    description: 'Entre os 30 primeiros membros',
+  },
+  vitalicio: {
+    label: 'Vitalicio',
+    emoji: '\u267E\uFE0F', // infinito
+    color: '#81D8D0',
+    bgColor: 'rgba(129, 216, 208, 0.15)',
+    description: 'Acesso vitalicio gratuito',
+  },
+  founder: {
+    label: 'Founder',
+    emoji: '\uD83D\uDC51', // coroa
+    color: '#C8102E',
+    bgColor: 'rgba(200, 16, 46, 0.15)',
+    description: 'Fundador(a) de comunidade',
+  },
+  coordenador_territorial: {
+    label: 'Coordenador',
+    emoji: '\uD83C\uDF0D', // globo
+    color: '#FF6B35',
+    bgColor: 'rgba(255, 107, 53, 0.15)',
+    description: 'Coordenador(a) de nucleo territorial',
+  },
+  constancia_ritual: {
+    label: 'Constancia',
+    emoji: '\uD83D\uDD25', // fogo
+    color: '#FF4500',
+    bgColor: 'rgba(255, 69, 0, 0.15)',
+    description: '4+ semanas consecutivas de rituais',
+  },
+  presenca_territorial: {
+    label: 'Territorio',
+    emoji: '\uD83D\uDCCD', // pin
+    color: '#FF6B35',
+    bgColor: 'rgba(255, 107, 53, 0.15)',
+    description: '3+ encontros presenciais',
+  },
+  lideranca: {
+    label: 'Lideranca',
+    emoji: '\uD83C\uDF1F', // estrela brilhante
+    color: '#A855F7',
+    bgColor: 'rgba(168, 85, 247, 0.15)',
+    description: 'Organizou 1+ live ou evento',
+  },
+  presenca: {
+    label: 'Presenca',
+    emoji: '\uD83D\uDCAC', // balao
+    color: '#81D8D0',
+    bgColor: 'rgba(129, 216, 208, 0.15)',
+    description: '10+ comentarios relevantes',
+  },
+};
+
+export function useBadges(userId?: string) {
+  const [badges, setBadges] = useState<UserBadge[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadBadges = useCallback(async () => {
+    if (!userId) return;
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('user_badges')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('earned_at', { ascending: true })
+        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+      if (error) throw error;
+      setBadges((data || []) as UserBadge[]);
+    } catch (err) {
+      console.error('[useBadges] Erro ao carregar:', err);
+      // Silencioso — badges nao sao criticas
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    loadBadges();
+  }, [loadBadges]);
+
+  /** Verificar se usuario tem um badge especifico */
+  const hasBadge = useCallback((type: BadgeType): boolean => {
+    return badges.some(b => b.badge_type === type);
+  }, [badges]);
+
+  /** Obter config visual de um badge */
+  const getBadgeConfig = (type: BadgeType) => BADGE_CONFIG[type];
+
+  return {
+    badges,
+    isLoading,
+    hasBadge,
+    getBadgeConfig,
+    refreshBadges: loadBadges,
+    badgeCount: badges.length,
+  };
+}
+
+/** Hook para carregar badges de multiplos usuarios (para listas) */
+export function useBadgesForUsers(userIds: string[]) {
+  const [badgeMap, setBadgeMap] = useState<Record<string, UserBadge[]>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (userIds.length === 0) return;
+
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('user_badges')
+          .select('*')
+          .in('user_id', userIds)
+          .eq('is_active', true)
+          .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+        if (error) throw error;
+
+        const map: Record<string, UserBadge[]> = {};
+        (data || []).forEach((badge: any) => {
+          if (!map[badge.user_id]) map[badge.user_id] = [];
+          map[badge.user_id].push(badge as UserBadge);
+        });
+        setBadgeMap(map);
+      } catch (err) {
+        console.error('[useBadgesForUsers] Erro:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    load();
+  }, [userIds.join(',')]);
+
+  return { badgeMap, isLoading };
+}
+
+// ═══════════════════════════════════════════════════════════
+// MOTOR DE CONCESSÃO AUTOMÁTICA — Gamificação Invisível
+// Verifica condições e concede selos silenciosamente.
+// ═══════════════════════════════════════════════════════════
+
+interface BadgeEligibility {
+  type: BadgeType;
+  eligible: boolean;
+  reason: string;
+}
+
+/** Conceder badge se ainda nao possui (idempotente) */
+async function grantBadgeIfNew(userId: string, badgeType: BadgeType): Promise<boolean> {
+  try {
+    // Verificar se ja tem
+    const { data: existing } = await supabase
+      .from('user_badges')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('badge_type', badgeType)
+      .limit(1);
+
+    if (existing && existing.length > 0) return false; // Ja possui
+
+    const { error } = await supabase
+      .from('user_badges')
+      .insert({
+        user_id: userId,
+        badge_type: badgeType,
+        earned_at: new Date().toISOString(),
+        is_active: true,
+      });
+
+    if (error) {
+      // Conflito de unique = ja existe, tudo bem
+      if (error.code === '23505') return false;
+      throw error;
+    }
+
+    console.log(`[useBadges] Selo concedido: ${badgeType} para ${userId}`);
+    return true;
+  } catch (err) {
+    console.error(`[useBadges] Erro ao conceder ${badgeType}:`, err);
+    return false;
+  }
+}
+
+/** Verificar elegibilidade para TODOS os selos de gamificacao */
+async function checkAllEligibility(userId: string): Promise<BadgeEligibility[]> {
+  const results: BadgeEligibility[] = [];
+
+  try {
+    // ── 1. SELO CONSTÂNCIA: 4+ semanas consecutivas de rituais ──
+    const { data: ritualLogs } = await supabase
+      .from('ritual_logs')
+      .select('completed_at')
+      .eq('user_id', userId)
+      .order('completed_at', { ascending: false });
+
+    if (ritualLogs && ritualLogs.length > 0) {
+      // Agrupar por semana ISO
+      const weekSet = new Set<string>();
+      ritualLogs.forEach((log: any) => {
+        const d = new Date(log.completed_at);
+        const yearWeek = `${d.getFullYear()}-W${String(getISOWeek(d)).padStart(2, '0')}`;
+        weekSet.add(yearWeek);
+      });
+
+      // Contar semanas consecutivas a partir da mais recente
+      const sortedWeeks = Array.from(weekSet).sort().reverse();
+      let consecutive = 1;
+      for (let i = 1; i < sortedWeeks.length; i++) {
+        if (areConsecutiveWeeks(sortedWeeks[i - 1], sortedWeeks[i])) {
+          consecutive++;
+        } else break;
+      }
+
+      results.push({
+        type: 'constancia_ritual',
+        eligible: consecutive >= 4,
+        reason: `${consecutive} semanas consecutivas de rituais`,
+      });
+    } else {
+      results.push({ type: 'constancia_ritual', eligible: false, reason: '0 rituais registrados' });
+    }
+
+    // ── 2. SELO TERRITÓRIO: 3+ encontros presenciais ──
+    const { data: eventAttendance } = await supabase
+      .from('event_attendees')
+      .select('id, event:event_id (event_type)')
+      .eq('user_id', userId)
+      .eq('status', 'confirmed');
+
+    const presencialCount = (eventAttendance || []).filter(
+      (a: any) => a.event?.event_type === 'presencial' || a.event?.event_type === 'hibrido'
+    ).length;
+
+    results.push({
+      type: 'presenca_territorial',
+      eligible: presencialCount >= 3,
+      reason: `${presencialCount} encontros presenciais`,
+    });
+
+    // ── 3. SELO LIDERANÇA: 1+ live ou evento organizado ──
+    const { data: organizedEvents } = await supabase
+      .from('events')
+      .select('id')
+      .eq('host_id', userId)
+      .limit(1);
+
+    const { data: organizedLives } = await supabase
+      .from('lives')
+      .select('id')
+      .eq('host_id', userId)
+      .limit(1);
+
+    const hasOrganized = ((organizedEvents?.length || 0) + (organizedLives?.length || 0)) >= 1;
+
+    results.push({
+      type: 'lideranca',
+      eligible: hasOrganized,
+      reason: hasOrganized ? 'Organizou evento ou live' : 'Nenhum evento ou live organizado',
+    });
+
+    // ── 4. SELO PRESENÇA: 10+ comentários ──
+    const { count: commentCount } = await supabase
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('author', userId);
+
+    results.push({
+      type: 'presenca',
+      eligible: (commentCount || 0) >= 10,
+      reason: `${commentCount || 0} comentarios`,
+    });
+
+  } catch (err) {
+    console.error('[useBadges] Erro ao verificar elegibilidade:', err);
+  }
+
+  return results;
+}
+
+/** Executar verificacao completa e conceder selos automaticamente */
+export async function runBadgeEngine(userId: string): Promise<{ granted: BadgeType[] }> {
+  const granted: BadgeType[] = [];
+
+  try {
+    const eligibility = await checkAllEligibility(userId);
+
+    for (const check of eligibility) {
+      if (check.eligible) {
+        const wasNew = await grantBadgeIfNew(userId, check.type);
+        if (wasNew) granted.push(check.type);
+      }
+    }
+
+    if (granted.length > 0) {
+      console.log(`[useBadges] Selos concedidos para ${userId}:`, granted);
+    }
+  } catch (err) {
+    console.error('[useBadges] Erro no motor de badges:', err);
+  }
+
+  return { granted };
+}
+
+// ── Utilitarios de semana ISO ──
+
+function getISOWeek(date: Date): number {
+  const d = new Date(date.getTime());
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+}
+
+function areConsecutiveWeeks(newer: string, older: string): boolean {
+  // formato: "2026-W09", "2026-W08"
+  const [yN, wN] = newer.split('-W').map(Number);
+  const [yO, wO] = older.split('-W').map(Number);
+  if (yN === yO) return wN - wO === 1;
+  if (yN - yO === 1 && wO >= 52 && wN === 1) return true;
+  return false;
 }

@@ -1,7 +1,4 @@
-{
-  "lote": 5,
-  "status": "pending",
-  "file_path": "src/styles/tailwind.css",
-  "created_at": "2026-02-27T05:36:31.081Z",
-  "file_content": "@import 'tailwindcss' source(none);\n@source '../**/*.{js,ts,jsx,tsx}';\n\n@import 'tw-animate-css';\n"
-}
+@import 'tailwindcss' source(none);
+@source '../**/*.{js,ts,jsx,tsx}';
+
+@import 'tw-animate-css';

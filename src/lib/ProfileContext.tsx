@@ -1,7 +1,308 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/ProfileContext.tsx",
-  "created_at": "2026-02-27T05:35:59.908Z",
-  "file_content": "import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';\nimport type { ReactNode } from 'react';\nimport { supabase } from './supabase';\nimport { TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';\nimport type { User } from './supabase';\nimport { normalizeRole } from './roleEngine';\n\ninterface ProfileContextValue {\n  user: User | null;\n  isLoading: boolean;\n  updateProfile: (updates: Partial<User>) => Promise<{ success: boolean; data?: User; error?: string }>;\n  uploadPhoto: (file: File) => Promise<{ success: boolean; url?: string; error?: string }>;\n  refreshProfile: () => Promise<void>;\n}\n\nconst ProfileContext = createContext<ProfileContextValue | null>(null);\n\n// Timeout helper — cancela se demorar demais\nfunction withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promise<T> {\n  return Promise.race([\n    promise,\n    new Promise<T>((_, reject) =>\n      setTimeout(() => reject(new Error(`Timeout ${label} (${ms}ms)`)), ms)\n    ),\n  ]) as Promise<T>;\n}\n\nexport function ProfileProvider({ children }: { children: ReactNode }) {\n  const [user, setUser] = useState<User | null>(null);\n  const [isLoading, setIsLoading] = useState(true);\n  const isLoadingRef = useRef(true); // ref para evitar stale closure no timeout\n\n  const loadProfile = useCallback(async (userId?: string) => {\n    try {\n      let uid = userId;\n      if (!uid) {\n        const { data: { session } } = await supabase.auth.getSession();\n        uid = session?.user?.id;\n      }\n\n      if (!uid) {\n        setUser(null);\n        setIsLoading(false);\n        isLoadingRef.current = false;\n        return;\n      }\n\n      let { data, error } = await withTimeout(\n        supabase.from('users').select('*').eq('id', uid).single(),\n        TIMEOUTS.PROFILE,\n        'profile-select'\n      );\n\n      // SAFETY NET: registro não existe na tabela users → criar automaticamente\n      if (error && (error as any).code === 'PGRST116') {\n        console.warn('Safety net: usuário não encontrado em users, criando registro...');\n        const { data: { user: authUser } } = await supabase.auth.getUser();\n        if (authUser) {\n          const { data: newUser, error: insertError } = await withTimeout(\n            supabase\n              .from('users')\n              .insert({\n                id: uid,\n                name: authUser.user_metadata?.name || 'Novo Membro',\n                display_name: authUser.user_metadata?.name || 'Novo Membro',\n                role: 'registered_unfinished',\n                is_beta_lifetime_flag: false,\n                access_released: false,\n                onboarding_done: true,\n                leadership_onboarding_done: false,\n                age_verified: false,\n                whatsapp: authUser.user_metadata?.whatsapp\n                  ? [authUser.user_metadata.whatsapp]\n                  : null,\n                allow_whatsapp: authUser.user_metadata?.allow_whatsapp || false,\n                allow_email: authUser.user_metadata?.allow_email ?? true,\n              })\n              .select()\n              .single(),\n            TIMEOUTS.PROFILE,\n            'profile-insert'\n          );\n\n          if (!insertError && newUser) {\n            data = newUser;\n            error = null;\n          } else {\n            console.error('Safety net: erro ao criar usuário:', insertError);\n            setIsLoading(false);\n            isLoadingRef.current = false;\n            return;\n          }\n        }\n      }\n\n      if (error) throw error;\n\n      // SYNC: preencher whatsapp a partir de user_metadata se vazio\n      // Feito em background — não bloqueia o loading\n      if (data && (!data.whatsapp || (Array.isArray(data.whatsapp) && data.whatsapp.length === 0))) {\n        // Fire-and-forget: não esperar por isso\n        supabase.auth.getUser().then(({ data: { user: authUser } }) => {\n          const metaWa = authUser?.user_metadata?.whatsapp;\n          if (metaWa && uid) {\n            supabase\n              .from('users')\n              .update({\n                whatsapp: [metaWa],\n                allow_whatsapp: authUser!.user_metadata?.allow_whatsapp || false,\n                allow_email: authUser!.user_metadata?.allow_email ?? true,\n              })\n              .eq('id', uid)\n              .select()\n              .single()\n              .then(({ data: patched, error: patchErr }) => {\n                if (!patchErr && patched) {\n                  console.log('Sync: whatsapp preenchido a partir de user_metadata');\n                  setUser({ ...patched, role: normalizeRole(patched.role) });\n                }\n              });\n          }\n        }).catch(() => { /* ignorar erros de sync */ });\n      }\n\n      // Normalizar role\n      if (data) {\n        data = { ...data, role: normalizeRole(data.role) };\n      }\n\n      setUser(data);\n\n      // v1.1: Atualizar last_active_at em background (ciclos de retorno)\n      if (data?.id) {\n        supabase\n          .from('users')\n          .update({ last_active_at: new Date().toISOString() })\n          .eq('id', data.id)\n          .then(() => {})\n          .catch(() => {});\n      }\n    } catch (err) {\n      console.error('Erro ao carregar perfil:', err);\n    } finally {\n      setIsLoading(false);\n      isLoadingRef.current = false;\n    }\n  }, []);\n\n  // ÚNICO listener de auth para toda a aplicação\n  useEffect(() => {\n    let isMounted = true;\n\n    // ═══════════════════════════════════════════════════════════════\n    // FAST PATH: Se não existe sessão no localStorage, o visitante\n    // vê a landing page INSTANTANEAMENTE (0ms) em vez de esperar\n    // 10-25s pelo cold start do Supabase free tier.\n    // ═══════════════════════════════════════════════════════════════\n    const hasStoredSession = !!localStorage.getItem(SUPABASE_STORAGE_KEY);\n\n    if (!hasStoredSession) {\n      // Visitante puro — sem sessão, sem espera\n      setUser(null);\n      setIsLoading(false);\n      isLoadingRef.current = false;\n\n      // Ainda escutar auth changes (caso faça login depois)\n      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {\n        if (!isMounted) return;\n        if (event === 'SIGNED_IN' && session) {\n          isLoadingRef.current = true;\n          setIsLoading(true);\n          await loadProfile(session.user.id);\n        } else if (event === 'SIGNED_OUT') {\n          setUser(null);\n        }\n      });\n\n      return () => {\n        isMounted = false;\n        subscription.unsubscribe();\n      };\n    }\n\n    // ═══════════════════════════════════════════════════════════════\n    // SLOW PATH: Usuário com sessão armazenada — carrega perfil\n    // com safety net de 10s (antes era 25s)\n    // ═══════════════════════════════════════════════════════════════\n    const timeout = setTimeout(() => {\n      if (isMounted && isLoadingRef.current) {\n        console.warn('Profile: timeout de segurança atingido, liberando UI');\n        setIsLoading(false);\n        isLoadingRef.current = false;\n      }\n    }, TIMEOUTS.SAFETY_NET);\n\n    // Carga inicial\n    loadProfile();\n\n    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {\n      if (!isMounted) return;\n\n      if (event === 'SIGNED_IN' && session) {\n        isLoadingRef.current = true;\n        setIsLoading(true);\n        await loadProfile(session.user.id);\n      } else if (event === 'SIGNED_OUT') {\n        setUser(null);\n      }\n    });\n\n    return () => {\n      isMounted = false;\n      clearTimeout(timeout);\n      subscription.unsubscribe();\n    };\n  }, [loadProfile]);\n\n  const updateProfile = useCallback(async (updates: Partial<User>) => {\n    try {\n      if (!user?.id) throw new Error('Usuário não autenticado');\n\n      const { data, error } = await withTimeout(\n        supabase.from('users').update(updates).eq('id', user.id).select().single(),\n        TIMEOUTS.MUTATION,\n        'profile-update'\n      );\n\n      if (error) throw error;\n\n      setUser(data);\n      return { success: true, data };\n    } catch (error: any) {\n      console.error('Erro ao atualizar perfil:', error);\n      return { success: false, error: error.message };\n    }\n  }, [user?.id]);\n\n  const uploadPhoto = useCallback(async (file: File) => {\n    try {\n      if (!user?.id) throw new Error('Usuário não autenticado');\n\n      const fileExt = file.name.split('.').pop();\n      const fileName = `${user.id}-${Date.now()}.${fileExt}`;\n      const filePath = `profile-photos/${fileName}`;\n\n      const { error: uploadError } = await withTimeout(\n        supabase.storage.from('avatars').upload(filePath, file, {\n          cacheControl: '3600',\n          upsert: true\n        }),\n        TIMEOUTS.UPLOAD,\n        'photo-upload'\n      );\n\n      if (uploadError) throw uploadError;\n\n      const { data: { publicUrl } } = supabase.storage\n        .from('avatars')\n        .getPublicUrl(filePath);\n\n      const { data, error } = await withTimeout(\n        supabase.from('users').update({ profile_photo: publicUrl }).eq('id', user.id).select().single(),\n        TIMEOUTS.MUTATION,\n        'photo-update'\n      );\n\n      if (error) throw error;\n\n      setUser(data);\n      return { success: true, url: publicUrl };\n    } catch (error: any) {\n      console.error('Erro ao fazer upload de foto:', error);\n      return { success: false, error: error.message };\n    }\n  }, [user?.id]);\n\n  return (\n    <ProfileContext.Provider value={{\n      user,\n      isLoading,\n      updateProfile,\n      uploadPhoto,\n      refreshProfile: () => loadProfile()\n    }}>\n      {children}\n    </ProfileContext.Provider>\n  );\n}\n\n// Fallback seguro para HMR / contexto não disponível\nconst FALLBACK_CONTEXT: ProfileContextValue = {\n  user: null,\n  isLoading: true,\n  updateProfile: async () => ({ success: false, error: 'Context not ready' }),\n  uploadPhoto: async () => ({ success: false, error: 'Context not ready' }),\n  refreshProfile: async () => {},\n};\n\nexport function useProfileContext(): ProfileContextValue {\n  const ctx = useContext(ProfileContext);\n  if (!ctx) {\n    // Em vez de crashar, retorna fallback seguro (loading state)\n    // Isso cobre edge cases de HMR e race conditions\n    console.warn('[ProfileContext] Contexto não encontrado — usando fallback (isLoading: true)');\n    return FALLBACK_CONTEXT;\n  }\n  return ctx;\n}"
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { supabase } from './supabase';
+import { TIMEOUTS, SUPABASE_STORAGE_KEY } from './supabase';
+import type { User } from './supabase';
+import { normalizeRole } from './roleEngine';
+
+interface ProfileContextValue {
+  user: User | null;
+  isLoading: boolean;
+  updateProfile: (updates: Partial<User>) => Promise<{ success: boolean; data?: User; error?: string }>;
+  uploadPhoto: (file: File) => Promise<{ success: boolean; url?: string; error?: string }>;
+  refreshProfile: () => Promise<void>;
+}
+
+const ProfileContext = createContext<ProfileContextValue | null>(null);
+
+// Timeout helper — cancela se demorar demais
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = ''): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout ${label} (${ms}ms)`)), ms)
+    ),
+  ]) as Promise<T>;
+}
+
+export function ProfileProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const isLoadingRef = useRef(true); // ref para evitar stale closure no timeout
+
+  const loadProfile = useCallback(async (userId?: string) => {
+    try {
+      let uid = userId;
+      if (!uid) {
+        const { data: { session } } = await supabase.auth.getSession();
+        uid = session?.user?.id;
+      }
+
+      if (!uid) {
+        setUser(null);
+        setIsLoading(false);
+        isLoadingRef.current = false;
+        return;
+      }
+
+      let { data, error } = await withTimeout(
+        supabase.from('users').select('*').eq('id', uid).single(),
+        TIMEOUTS.PROFILE,
+        'profile-select'
+      );
+
+      // SAFETY NET: registro não existe na tabela users → criar automaticamente
+      if (error && (error as any).code === 'PGRST116') {
+        console.warn('Safety net: usuário não encontrado em users, criando registro...');
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const { data: newUser, error: insertError } = await withTimeout(
+            supabase
+              .from('users')
+              .insert({
+                id: uid,
+                name: authUser.user_metadata?.name || 'Novo Membro',
+                display_name: authUser.user_metadata?.name || 'Novo Membro',
+                role: 'registered_unfinished',
+                is_beta_lifetime_flag: false,
+                access_released: false,
+                onboarding_done: true,
+                leadership_onboarding_done: false,
+                age_verified: false,
+                whatsapp: authUser.user_metadata?.whatsapp
+                  ? [authUser.user_metadata.whatsapp]
+                  : null,
+                allow_whatsapp: authUser.user_metadata?.allow_whatsapp || false,
+                allow_email: authUser.user_metadata?.allow_email ?? true,
+              })
+              .select()
+              .single(),
+            TIMEOUTS.PROFILE,
+            'profile-insert'
+          );
+
+          if (!insertError && newUser) {
+            data = newUser;
+            error = null;
+          } else {
+            console.error('Safety net: erro ao criar usuário:', insertError);
+            setIsLoading(false);
+            isLoadingRef.current = false;
+            return;
+          }
+        }
+      }
+
+      if (error) throw error;
+
+      // SYNC: preencher whatsapp a partir de user_metadata se vazio
+      // Feito em background — não bloqueia o loading
+      if (data && (!data.whatsapp || (Array.isArray(data.whatsapp) && data.whatsapp.length === 0))) {
+        // Fire-and-forget: não esperar por isso
+        supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+          const metaWa = authUser?.user_metadata?.whatsapp;
+          if (metaWa && uid) {
+            supabase
+              .from('users')
+              .update({
+                whatsapp: [metaWa],
+                allow_whatsapp: authUser!.user_metadata?.allow_whatsapp || false,
+                allow_email: authUser!.user_metadata?.allow_email ?? true,
+              })
+              .eq('id', uid)
+              .select()
+              .single()
+              .then(({ data: patched, error: patchErr }) => {
+                if (!patchErr && patched) {
+                  console.log('Sync: whatsapp preenchido a partir de user_metadata');
+                  setUser({ ...patched, role: normalizeRole(patched.role) });
+                }
+              });
+          }
+        }).catch(() => { /* ignorar erros de sync */ });
+      }
+
+      // Normalizar role
+      if (data) {
+        data = { ...data, role: normalizeRole(data.role) };
+      }
+
+      setUser(data);
+
+      // v1.1: Atualizar last_active_at em background (ciclos de retorno)
+      if (data?.id) {
+        supabase
+          .from('users')
+          .update({ last_active_at: new Date().toISOString() })
+          .eq('id', data.id)
+          .then(() => {})
+          .catch(() => {});
+      }
+    } catch (err) {
+      console.error('Erro ao carregar perfil:', err);
+    } finally {
+      setIsLoading(false);
+      isLoadingRef.current = false;
+    }
+  }, []);
+
+  // ÚNICO listener de auth para toda a aplicação
+  useEffect(() => {
+    let isMounted = true;
+
+    // ═══════════════════════════════════════════════════════════════
+    // FAST PATH: Se não existe sessão no localStorage, o visitante
+    // vê a landing page INSTANTANEAMENTE (0ms) em vez de esperar
+    // 10-25s pelo cold start do Supabase free tier.
+    // ═══════════════════════════════════════════════════════════════
+    const hasStoredSession = !!localStorage.getItem(SUPABASE_STORAGE_KEY);
+
+    if (!hasStoredSession) {
+      // Visitante puro — sem sessão, sem espera
+      setUser(null);
+      setIsLoading(false);
+      isLoadingRef.current = false;
+
+      // Ainda escutar auth changes (caso faça login depois)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+        if (event === 'SIGNED_IN' && session) {
+          isLoadingRef.current = true;
+          setIsLoading(true);
+          await loadProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SLOW PATH: Usuário com sessão armazenada — carrega perfil
+    // com safety net de 10s (antes era 25s)
+    // ═══════════════════════════════════════════════════════════════
+    const timeout = setTimeout(() => {
+      if (isMounted && isLoadingRef.current) {
+        console.warn('Profile: timeout de segurança atingido, liberando UI');
+        setIsLoading(false);
+        isLoadingRef.current = false;
+      }
+    }, TIMEOUTS.SAFETY_NET);
+
+    // Carga inicial
+    loadProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_IN' && session) {
+        isLoadingRef.current = true;
+        setIsLoading(true);
+        await loadProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
+  }, [loadProfile]);
+
+  const updateProfile = useCallback(async (updates: Partial<User>) => {
+    try {
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const { data, error } = await withTimeout(
+        supabase.from('users').update(updates).eq('id', user.id).select().single(),
+        TIMEOUTS.MUTATION,
+        'profile-update'
+      );
+
+      if (error) throw error;
+
+      setUser(data);
+      return { success: true, data };
+    } catch (error: any) {
+      console.error('Erro ao atualizar perfil:', error);
+      return { success: false, error: error.message };
+    }
+  }, [user?.id]);
+
+  const uploadPhoto = useCallback(async (file: File) => {
+    try {
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `profile-photos/${fileName}`;
+
+      const { error: uploadError } = await withTimeout(
+        supabase.storage.from('avatars').upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        }),
+        TIMEOUTS.UPLOAD,
+        'photo-upload'
+      );
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const { data, error } = await withTimeout(
+        supabase.from('users').update({ profile_photo: publicUrl }).eq('id', user.id).select().single(),
+        TIMEOUTS.MUTATION,
+        'photo-update'
+      );
+
+      if (error) throw error;
+
+      setUser(data);
+      return { success: true, url: publicUrl };
+    } catch (error: any) {
+      console.error('Erro ao fazer upload de foto:', error);
+      return { success: false, error: error.message };
+    }
+  }, [user?.id]);
+
+  return (
+    <ProfileContext.Provider value={{
+      user,
+      isLoading,
+      updateProfile,
+      uploadPhoto,
+      refreshProfile: () => loadProfile()
+    }}>
+      {children}
+    </ProfileContext.Provider>
+  );
+}
+
+// Fallback seguro para HMR / contexto não disponível
+const FALLBACK_CONTEXT: ProfileContextValue = {
+  user: null,
+  isLoading: true,
+  updateProfile: async () => ({ success: false, error: 'Context not ready' }),
+  uploadPhoto: async () => ({ success: false, error: 'Context not ready' }),
+  refreshProfile: async () => {},
+};
+
+export function useProfileContext(): ProfileContextValue {
+  const ctx = useContext(ProfileContext);
+  if (!ctx) {
+    // Em vez de crashar, retorna fallback seguro (loading state)
+    // Isso cobre edge cases de HMR e race conditions
+    console.warn('[ProfileContext] Contexto não encontrado — usando fallback (isLoading: true)');
+    return FALLBACK_CONTEXT;
+  }
+  return ctx;
 }

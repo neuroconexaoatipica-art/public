@@ -1,7 +1,266 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useMemberTestimonials.ts",
-  "created_at": "2026-02-27T05:36:06.285Z",
-  "file_content": "/**\n * useMemberTestimonials — Hook para depoimentos entre membros (estilo Orkut!)\n * v1.1: Aprovacao obrigatoria pelo receptor\n */\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { supabase, TIMEOUTS } from './supabase';\nimport { cleanTextInput, MAX_LENGTHS, RATE_LIMITS } from './security';\n\nexport interface MemberTestimonial {\n  id: string;\n  from_user: string;\n  to_user: string;\n  text: string;\n  approved_by_receiver: boolean;\n  is_public: boolean;\n  created_at: string;\n  // Joined\n  author_name?: string;\n  author_photo?: string;\n  author_display_name?: string;\n}\n\nexport function useMemberTestimonials(userId?: string) {\n  const [received, setReceived] = useState<MemberTestimonial[]>([]);\n  const [sent, setSent] = useState<MemberTestimonial[]>([]);\n  const [pending, setPending] = useState<MemberTestimonial[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n\n  const loadTestimonials = useCallback(async () => {\n    if (!userId) return;\n    setIsLoading(true);\n\n    try {\n      // Depoimentos RECEBIDOS (aprovados e publicos)\n      const { data: receivedData } = await supabase\n        .from('member_testimonials')\n        .select(`\n          *,\n          author:from_user (name, display_name, profile_photo)\n        `)\n        .eq('to_user', userId)\n        .eq('approved_by_receiver', true)\n        .eq('is_public', true)\n        .order('created_at', { ascending: false })\n        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));\n\n      const mappedReceived = (receivedData || []).map((t: any) => ({\n        ...t,\n        author_name: t.author?.name || 'Membro',\n        author_display_name: t.author?.display_name || t.author?.name || 'Membro',\n        author_photo: t.author?.profile_photo,\n      }));\n      setReceived(mappedReceived);\n\n      // Verificar se e o proprio usuario (para ver pendentes e enviados)\n      const { data: { user } } = await supabase.auth.getUser();\n      if (user?.id === userId) {\n        // Pendentes de aprovacao\n        const { data: pendingData } = await supabase\n          .from('member_testimonials')\n          .select(`\n            *,\n            author:from_user (name, display_name, profile_photo)\n          `)\n          .eq('to_user', userId)\n          .eq('approved_by_receiver', false)\n          .order('created_at', { ascending: false });\n\n        setPending((pendingData || []).map((t: any) => ({\n          ...t,\n          author_name: t.author?.name || 'Membro',\n          author_display_name: t.author?.display_name || t.author?.name || 'Membro',\n          author_photo: t.author?.profile_photo,\n        })));\n\n        // Enviados por mim\n        const { data: sentData } = await supabase\n          .from('member_testimonials')\n          .select(`\n            *,\n            receiver:to_user (name, display_name, profile_photo)\n          `)\n          .eq('from_user', userId)\n          .order('created_at', { ascending: false });\n\n        setSent((sentData || []).map((t: any) => ({\n          ...t,\n          author_name: t.receiver?.name || 'Membro',\n          author_display_name: t.receiver?.display_name || t.receiver?.name || 'Membro',\n          author_photo: t.receiver?.profile_photo,\n        })));\n      }\n    } catch (err) {\n      console.error('[useMemberTestimonials] Erro:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, [userId]);\n\n  useEffect(() => {\n    loadTestimonials();\n  }, [loadTestimonials]);\n\n  /** Escrever depoimento para outro membro */\n  const writeTestimonial = useCallback(async (\n    toUserId: string,\n    text: string\n  ): Promise<{ success: boolean; error?: string }> => {\n    const rateCheck = RATE_LIMITS.CONNECTION('testimonial');\n    if (!rateCheck.allowed) {\n      return { success: false, error: 'Limite atingido. Tente novamente mais tarde.' };\n    }\n\n    const cleaned = cleanTextInput(text, MAX_LENGTHS.TESTIMONIAL);\n    if (!cleaned || cleaned.length < 10) {\n      return { success: false, error: 'Depoimento muito curto (minimo 10 caracteres)' };\n    }\n\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Voce precisa estar logado' };\n\n      if (user.id === toUserId) {\n        return { success: false, error: 'Voce nao pode escrever depoimento para si mesmo' };\n      }\n\n      // Verificar se ja escreveu para este usuario\n      const { data: existing } = await supabase\n        .from('member_testimonials')\n        .select('id')\n        .eq('from_user', user.id)\n        .eq('to_user', toUserId)\n        .limit(1);\n\n      if (existing && existing.length > 0) {\n        return { success: false, error: 'Voce ja escreveu um depoimento para esta pessoa' };\n      }\n\n      const { error: insertError } = await supabase\n        .from('member_testimonials')\n        .insert({\n          from_user: user.id,\n          to_user: toUserId,\n          text: cleaned,\n        });\n\n      if (insertError) throw insertError;\n\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useMemberTestimonials] Erro ao escrever:', err);\n      return { success: false, error: err.message || 'Erro ao enviar depoimento' };\n    }\n  }, []);\n\n  /** Aprovar depoimento recebido */\n  const approveTestimonial = useCallback(async (\n    testimonialId: string,\n    makePublic: boolean = true\n  ): Promise<{ success: boolean }> => {\n    try {\n      const { error } = await supabase\n        .from('member_testimonials')\n        .update({\n          approved_by_receiver: true,\n          is_public: makePublic,\n        })\n        .eq('id', testimonialId);\n\n      if (error) throw error;\n      await loadTestimonials();\n      return { success: true };\n    } catch (err) {\n      console.error('[useMemberTestimonials] Erro ao aprovar:', err);\n      return { success: false };\n    }\n  }, [loadTestimonials]);\n\n  /** Rejeitar/deletar depoimento */\n  const rejectTestimonial = useCallback(async (\n    testimonialId: string\n  ): Promise<{ success: boolean }> => {\n    try {\n      const { error } = await supabase\n        .from('member_testimonials')\n        .delete()\n        .eq('id', testimonialId);\n\n      if (error) throw error;\n      await loadTestimonials();\n      return { success: true };\n    } catch (err) {\n      console.error('[useMemberTestimonials] Erro ao rejeitar:', err);\n      return { success: false };\n    }\n  }, [loadTestimonials]);\n\n  /** Editar depoimento que EU escrevi (autor) */\n  const editTestimonial = useCallback(async (\n    testimonialId: string,\n    newText: string\n  ): Promise<{ success: boolean; error?: string }> => {\n    const cleaned = cleanTextInput(newText, MAX_LENGTHS.TESTIMONIAL);\n    if (!cleaned || cleaned.length < 10) {\n      return { success: false, error: 'Depoimento muito curto (minimo 10 caracteres)' };\n    }\n\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Voce precisa estar logado' };\n\n      // Edicao reseta aprovacao — receptor precisa aprovar novamente\n      const { error } = await supabase\n        .from('member_testimonials')\n        .update({ text: cleaned, approved_by_receiver: false })\n        .eq('id', testimonialId)\n        .eq('from_user', user.id);\n\n      if (error) throw error;\n      await loadTestimonials();\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useMemberTestimonials] Erro ao editar:', err);\n      return { success: false, error: err.message || 'Erro ao editar depoimento' };\n    }\n  }, [loadTestimonials]);\n\n  /** Remover depoimento que EU escrevi (autor) */\n  const deleteMyTestimonial = useCallback(async (\n    testimonialId: string\n  ): Promise<{ success: boolean; error?: string }> => {\n    try {\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) return { success: false, error: 'Voce precisa estar logado' };\n\n      const { error } = await supabase\n        .from('member_testimonials')\n        .delete()\n        .eq('id', testimonialId)\n        .eq('from_user', user.id);\n\n      if (error) throw error;\n      await loadTestimonials();\n      return { success: true };\n    } catch (err: any) {\n      console.error('[useMemberTestimonials] Erro ao deletar:', err);\n      return { success: false, error: err.message || 'Erro ao remover depoimento' };\n    }\n  }, [loadTestimonials]);\n\n  return {\n    received,\n    sent,\n    pending,\n    isLoading,\n    writeTestimonial,\n    approveTestimonial,\n    rejectTestimonial,\n    editTestimonial,\n    deleteMyTestimonial,\n    refreshTestimonials: loadTestimonials,\n    receivedCount: received.length,\n    pendingCount: pending.length,\n  };\n}"
+/**
+ * useMemberTestimonials — Hook para depoimentos entre membros (estilo Orkut!)
+ * v1.1: Aprovacao obrigatoria pelo receptor
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, TIMEOUTS } from './supabase';
+import { cleanTextInput, MAX_LENGTHS, RATE_LIMITS } from './security';
+
+export interface MemberTestimonial {
+  id: string;
+  from_user: string;
+  to_user: string;
+  text: string;
+  approved_by_receiver: boolean;
+  is_public: boolean;
+  created_at: string;
+  // Joined
+  author_name?: string;
+  author_photo?: string;
+  author_display_name?: string;
+}
+
+export function useMemberTestimonials(userId?: string) {
+  const [received, setReceived] = useState<MemberTestimonial[]>([]);
+  const [sent, setSent] = useState<MemberTestimonial[]>([]);
+  const [pending, setPending] = useState<MemberTestimonial[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadTestimonials = useCallback(async () => {
+    if (!userId) return;
+    setIsLoading(true);
+
+    try {
+      // Depoimentos RECEBIDOS (aprovados e publicos)
+      const { data: receivedData } = await supabase
+        .from('member_testimonials')
+        .select(`
+          *,
+          author:from_user (name, display_name, profile_photo)
+        `)
+        .eq('to_user', userId)
+        .eq('approved_by_receiver', true)
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .abortSignal(AbortSignal.timeout(TIMEOUTS.QUERY));
+
+      const mappedReceived = (receivedData || []).map((t: any) => ({
+        ...t,
+        author_name: t.author?.name || 'Membro',
+        author_display_name: t.author?.display_name || t.author?.name || 'Membro',
+        author_photo: t.author?.profile_photo,
+      }));
+      setReceived(mappedReceived);
+
+      // Verificar se e o proprio usuario (para ver pendentes e enviados)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id === userId) {
+        // Pendentes de aprovacao
+        const { data: pendingData } = await supabase
+          .from('member_testimonials')
+          .select(`
+            *,
+            author:from_user (name, display_name, profile_photo)
+          `)
+          .eq('to_user', userId)
+          .eq('approved_by_receiver', false)
+          .order('created_at', { ascending: false });
+
+        setPending((pendingData || []).map((t: any) => ({
+          ...t,
+          author_name: t.author?.name || 'Membro',
+          author_display_name: t.author?.display_name || t.author?.name || 'Membro',
+          author_photo: t.author?.profile_photo,
+        })));
+
+        // Enviados por mim
+        const { data: sentData } = await supabase
+          .from('member_testimonials')
+          .select(`
+            *,
+            receiver:to_user (name, display_name, profile_photo)
+          `)
+          .eq('from_user', userId)
+          .order('created_at', { ascending: false });
+
+        setSent((sentData || []).map((t: any) => ({
+          ...t,
+          author_name: t.receiver?.name || 'Membro',
+          author_display_name: t.receiver?.display_name || t.receiver?.name || 'Membro',
+          author_photo: t.receiver?.profile_photo,
+        })));
+      }
+    } catch (err) {
+      console.error('[useMemberTestimonials] Erro:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    loadTestimonials();
+  }, [loadTestimonials]);
+
+  /** Escrever depoimento para outro membro */
+  const writeTestimonial = useCallback(async (
+    toUserId: string,
+    text: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const rateCheck = RATE_LIMITS.CONNECTION('testimonial');
+    if (!rateCheck.allowed) {
+      return { success: false, error: 'Limite atingido. Tente novamente mais tarde.' };
+    }
+
+    const cleaned = cleanTextInput(text, MAX_LENGTHS.TESTIMONIAL);
+    if (!cleaned || cleaned.length < 10) {
+      return { success: false, error: 'Depoimento muito curto (minimo 10 caracteres)' };
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Voce precisa estar logado' };
+
+      if (user.id === toUserId) {
+        return { success: false, error: 'Voce nao pode escrever depoimento para si mesmo' };
+      }
+
+      // Verificar se ja escreveu para este usuario
+      const { data: existing } = await supabase
+        .from('member_testimonials')
+        .select('id')
+        .eq('from_user', user.id)
+        .eq('to_user', toUserId)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        return { success: false, error: 'Voce ja escreveu um depoimento para esta pessoa' };
+      }
+
+      const { error: insertError } = await supabase
+        .from('member_testimonials')
+        .insert({
+          from_user: user.id,
+          to_user: toUserId,
+          text: cleaned,
+        });
+
+      if (insertError) throw insertError;
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useMemberTestimonials] Erro ao escrever:', err);
+      return { success: false, error: err.message || 'Erro ao enviar depoimento' };
+    }
+  }, []);
+
+  /** Aprovar depoimento recebido */
+  const approveTestimonial = useCallback(async (
+    testimonialId: string,
+    makePublic: boolean = true
+  ): Promise<{ success: boolean }> => {
+    try {
+      const { error } = await supabase
+        .from('member_testimonials')
+        .update({
+          approved_by_receiver: true,
+          is_public: makePublic,
+        })
+        .eq('id', testimonialId);
+
+      if (error) throw error;
+      await loadTestimonials();
+      return { success: true };
+    } catch (err) {
+      console.error('[useMemberTestimonials] Erro ao aprovar:', err);
+      return { success: false };
+    }
+  }, [loadTestimonials]);
+
+  /** Rejeitar/deletar depoimento */
+  const rejectTestimonial = useCallback(async (
+    testimonialId: string
+  ): Promise<{ success: boolean }> => {
+    try {
+      const { error } = await supabase
+        .from('member_testimonials')
+        .delete()
+        .eq('id', testimonialId);
+
+      if (error) throw error;
+      await loadTestimonials();
+      return { success: true };
+    } catch (err) {
+      console.error('[useMemberTestimonials] Erro ao rejeitar:', err);
+      return { success: false };
+    }
+  }, [loadTestimonials]);
+
+  /** Editar depoimento que EU escrevi (autor) */
+  const editTestimonial = useCallback(async (
+    testimonialId: string,
+    newText: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const cleaned = cleanTextInput(newText, MAX_LENGTHS.TESTIMONIAL);
+    if (!cleaned || cleaned.length < 10) {
+      return { success: false, error: 'Depoimento muito curto (minimo 10 caracteres)' };
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Voce precisa estar logado' };
+
+      // Edicao reseta aprovacao — receptor precisa aprovar novamente
+      const { error } = await supabase
+        .from('member_testimonials')
+        .update({ text: cleaned, approved_by_receiver: false })
+        .eq('id', testimonialId)
+        .eq('from_user', user.id);
+
+      if (error) throw error;
+      await loadTestimonials();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useMemberTestimonials] Erro ao editar:', err);
+      return { success: false, error: err.message || 'Erro ao editar depoimento' };
+    }
+  }, [loadTestimonials]);
+
+  /** Remover depoimento que EU escrevi (autor) */
+  const deleteMyTestimonial = useCallback(async (
+    testimonialId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Voce precisa estar logado' };
+
+      const { error } = await supabase
+        .from('member_testimonials')
+        .delete()
+        .eq('id', testimonialId)
+        .eq('from_user', user.id);
+
+      if (error) throw error;
+      await loadTestimonials();
+      return { success: true };
+    } catch (err: any) {
+      console.error('[useMemberTestimonials] Erro ao deletar:', err);
+      return { success: false, error: err.message || 'Erro ao remover depoimento' };
+    }
+  }, [loadTestimonials]);
+
+  return {
+    received,
+    sent,
+    pending,
+    isLoading,
+    writeTestimonial,
+    approveTestimonial,
+    rejectTestimonial,
+    editTestimonial,
+    deleteMyTestimonial,
+    refreshTestimonials: loadTestimonials,
+    receivedCount: received.length,
+    pendingCount: pending.length,
+  };
 }

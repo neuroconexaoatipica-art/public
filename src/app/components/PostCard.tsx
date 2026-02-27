@@ -1,7 +1,304 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/PostCard.tsx",
-  "created_at": "2026-02-27T05:36:20.930Z",
-  "file_content": "import { useState } from \"react\";\nimport { Share2, Trash2, Globe, Lock, Flag, Pin, PinOff } from \"lucide-react\";\nimport { motion } from \"motion/react\";\nimport type { PostWithAuthor } from \"../../lib\";\nimport { supabase } from \"../../lib\";\nimport { UserAvatar } from \"./UserAvatar\";\nimport { CommentSection } from \"./CommentSection\";\nimport { ReactionBar } from \"./ReactionBar\";\nimport { ReportModal } from \"./ReportModal\";\nimport { InlineBadges } from \"./InlineBadges\";\n\ninterface PostCardProps {\n  post: PostWithAuthor;\n  onDelete?: (postId: string) => void;\n  onPinToggle?: () => void;\n  currentUserId?: string;\n  canModerate?: boolean;\n  onAuthorClick?: (userId: string) => void;\n  communityName?: string;\n}\n\nexport function PostCard({ post, onDelete, onPinToggle, currentUserId, canModerate, onAuthorClick, communityName }: PostCardProps) {\n  const [isDeleting, setIsDeleting] = useState(false);\n  const [isPinning, setIsPinning] = useState(false);\n  const [deleteError, setDeleteError] = useState<string | null>(null);\n  const [isReportOpen, setIsReportOpen] = useState(false);\n\n  const isOwnPost = currentUserId === post.author;\n\n  const handleDelete = async () => {\n    if (!confirm('Tem certeza que deseja deletar este post?')) return;\n\n    setIsDeleting(true);\n    setDeleteError(null);\n\n    const { error } = await supabase\n      .from('posts')\n      .delete()\n      .eq('id', post.id);\n\n    if (error) {\n      console.error('Erro ao deletar post:', error);\n      setDeleteError('Não foi possível deletar. Tente novamente ou contate a administração.');\n      setIsDeleting(false);\n      setTimeout(() => setDeleteError(null), 5000);\n      return;\n    }\n\n    if (onDelete) {\n      onDelete(post.id);\n    }\n\n    setIsDeleting(false);\n  };\n\n  const handleTogglePin = async () => {\n    if (isPinning) return;\n    setIsPinning(true);\n\n    const newPinned = !post.is_pinned;\n\n    const { error } = await supabase\n      .from('posts')\n      .update({ is_pinned: newPinned })\n      .eq('id', post.id);\n\n    if (error) {\n      console.error('Erro ao fixar/desafixar post:', error);\n    }\n\n    setIsPinning(false);\n\n    if (onPinToggle) {\n      onPinToggle();\n    }\n  };\n\n  const getTimeAgo = () => {\n    try {\n      const now = new Date();\n      const postDate = new Date(post.created_at);\n      const diffMs = now.getTime() - postDate.getTime();\n      const diffMins = Math.floor(diffMs / 60000);\n      const diffHours = Math.floor(diffMs / 3600000);\n      const diffDays = Math.floor(diffMs / 86400000);\n\n      if (diffMins < 1) return 'agora mesmo';\n      if (diffMins < 60) return `há ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;\n      if (diffHours < 24) return `há ${diffHours} hora${diffHours > 1 ? 's' : ''}`;\n      if (diffDays < 7) return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;\n      return `há ${Math.floor(diffDays / 7)} semana${Math.floor(diffDays / 7) > 1 ? 's' : ''}`;\n    } catch {\n      return 'há alguns instantes';\n    }\n  };\n\n  const getRoleBadge = () => {\n    const roleColors: Record<string, { bg: string; text: string; label: string }> = {\n      super_admin: { bg: 'bg-[#C8102E]/20', text: 'text-[#C8102E]', label: 'Admin' },\n      founder_paid: { bg: 'bg-[#81D8D0]/20', text: 'text-[#81D8D0]', label: 'Fundadora' },\n      moderator: { bg: 'bg-[#6B21A8]/20', text: 'text-[#A855F7]', label: 'Moderador(a)' },\n      member_free_legacy: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },\n      member_paid: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },\n      // Legados V7 (durante transição)\n      admin: { bg: 'bg-[#C8102E]/20', text: 'text-[#C8102E]', label: 'Admin' },\n      founder: { bg: 'bg-[#81D8D0]/20', text: 'text-[#81D8D0]', label: 'Fundadora' },\n      member: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },\n    };\n\n    const role = post.author_data?.role;\n    if (!role) return null;\n    const config = roleColors[role];\n    if (!config) return null;\n\n    return (\n      <span className={`px-2 py-0.5 ${config.bg} ${config.text} rounded-full text-xs font-semibold`}>\n        {config.label}\n      </span>\n    );\n  };\n\n  return (\n    <motion.div\n      initial={{ opacity: 0, y: 20 }}\n      animate={{ opacity: 1, y: 0 }}\n      transition={{ duration: 0.3 }}\n      className={`border rounded-2xl p-6 hover:bg-white/5 transition-colors ${\n        post.is_pinned\n          ? 'bg-[#81D8D0]/5 border-[#81D8D0]/30'\n          : 'bg-white/3 border-white/10'\n      }`}\n    >\n      {/* Badge Fixado */}\n      {post.is_pinned && (\n        <div className=\"flex items-center gap-2 mb-4 pb-3 border-b border-[#81D8D0]/20\">\n          <Pin className=\"h-4 w-4 text-[#81D8D0]\" />\n          <span className=\"text-sm font-semibold text-[#81D8D0]\">Fixado</span>\n        </div>\n      )}\n\n      {/* Header do Post */}\n      <div className=\"flex items-start justify-between mb-4\">\n        <div className=\"flex items-start gap-3 flex-1\">\n          {/* Avatar clicável */}\n          <UserAvatar\n            name={post.author_data?.display_name || post.author_data?.name || 'Anônimo'}\n            photoUrl={post.author_data?.profile_photo}\n            size=\"lg\"\n            onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}\n          />\n\n          {/* Info do Autor */}\n          <div className=\"flex-1 min-w-0\">\n            <div className=\"flex items-center gap-2 flex-wrap mb-1\">\n              <button\n                onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}\n                className={`font-semibold text-white truncate ${onAuthorClick ? 'hover:text-[#81D8D0] transition-colors cursor-pointer' : ''}`}\n              >\n                {post.author_data?.display_name || post.author_data?.name || 'Anônimo'}\n              </button>\n              <InlineBadges userId={post.author} maxVisible={3} />\n              {getRoleBadge()}\n            </div>\n            <div className=\"flex items-center gap-2 text-sm text-white/60 flex-wrap\">\n              <span>{getTimeAgo()}</span>\n              <span>·</span>\n              {post.is_public ? (\n                <span className=\"flex items-center gap-1\">\n                  <Globe className=\"h-3 w-3\" />\n                  Público\n                </span>\n              ) : (\n                <span className=\"flex items-center gap-1\">\n                  <Lock className=\"h-3 w-3\" />\n                  Membros\n                </span>\n              )}\n              {communityName && (\n                <>\n                  <span>·</span>\n                  <span className=\"text-[#81D8D0]\">{communityName}</span>\n                </>\n              )}\n            </div>\n          </div>\n        </div>\n      </div>\n\n      {/* Conteúdo do Post */}\n      <div className=\"mb-4\">\n        <p className=\"text-white/90 text-base leading-relaxed whitespace-pre-wrap\">\n          {post.content}\n        </p>\n        \n        {/* Imagem do Post */}\n        {post.image_url && (\n          <div className=\"mt-4\">\n            <img\n              src={post.image_url}\n              alt=\"Imagem do post\"\n              className=\"w-full max-h-[500px] object-cover rounded-xl\"\n              loading=\"lazy\"\n            />\n          </div>\n        )}\n      </div>\n\n      {/* Reações — 6 tipos de reação */}\n      <div className=\"mb-3 pt-3\">\n        <ReactionBar postId={post.id} />\n      </div>\n\n      {/* Ações do Post */}\n      <div className=\"flex items-center gap-4 pt-4 border-t border-white/5 flex-wrap\">\n        <button\n          onClick={() => {\n            if (navigator.share) {\n              navigator.share({ \n                title: 'NeuroConexão Atípica', \n                text: post.content.substring(0, 100),\n                url: window.location.href \n              }).catch(() => {});\n            }\n          }}\n          className=\"flex items-center gap-2 text-white/60 hover:text-[#FF6B35] transition-colors\"\n        >\n          <Share2 className=\"h-5 w-5\" />\n          <span className=\"text-sm font-medium\">Compartilhar</span>\n        </button>\n\n        {/* Botão Denúncia estruturada */}\n        <button\n          onClick={() => setIsReportOpen(true)}\n          className=\"flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors\"\n        >\n          <Flag className=\"h-4 w-4\" />\n          <span className=\"text-sm font-medium\">Denunciar</span>\n        </button>\n\n        {/* Botão Fixar/Desafixar (founder/admin) */}\n        {canModerate && (\n          <button\n            onClick={handleTogglePin}\n            disabled={isPinning}\n            className={`flex items-center gap-2 transition-colors disabled:opacity-50 ${\n              post.is_pinned\n                ? 'text-[#81D8D0] hover:text-[#81D8D0]/70'\n                : 'text-white/60 hover:text-[#81D8D0]'\n            }`}\n          >\n            {post.is_pinned ? (\n              <PinOff className=\"h-4 w-4\" />\n            ) : (\n              <Pin className=\"h-4 w-4\" />\n            )}\n            <span className=\"text-sm font-medium\">\n              {post.is_pinned ? 'Desafixar' : 'Fixar'}\n            </span>\n          </button>\n        )}\n\n        {/* Botão Deletar */}\n        {(isOwnPost || canModerate) && onDelete && (\n          <button\n            onClick={handleDelete}\n            disabled={isDeleting}\n            className=\"flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors disabled:opacity-50\"\n          >\n            <Trash2 className=\"h-4 w-4\" />\n            <span className=\"text-sm font-medium\">Deletar</span>\n          </button>\n        )}\n      </div>\n\n      {/* Mensagem de erro ao deletar */}\n      {deleteError && (\n        <div className=\"mt-3 px-4 py-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl flex items-center gap-3\">\n          <span className=\"text-sm text-[#C8102E] font-medium flex-1\">{deleteError}</span>\n          <button \n            onClick={() => setDeleteError(null)}\n            className=\"text-[#C8102E]/60 hover:text-[#C8102E] text-xs font-semibold\"\n          >\n            Fechar\n          </button>\n        </div>\n      )}\n\n      {/* Sistema de Comentários */}\n      <CommentSection\n        postId={post.id}\n        onAuthorClick={onAuthorClick}\n      />\n\n      {/* Modal de denúncia */}\n      <ReportModal\n        isOpen={isReportOpen}\n        onClose={() => setIsReportOpen(false)}\n        contentId={post.id}\n        contentType=\"post\"\n        reportedUserId={post.author}\n      />\n    </motion.div>\n  );\n}"
+import { useState } from "react";
+import { Share2, Trash2, Globe, Lock, Flag, Pin, PinOff } from "lucide-react";
+import { motion } from "motion/react";
+import type { PostWithAuthor } from "../../lib";
+import { supabase } from "../../lib";
+import { UserAvatar } from "./UserAvatar";
+import { CommentSection } from "./CommentSection";
+import { ReactionBar } from "./ReactionBar";
+import { ReportModal } from "./ReportModal";
+import { InlineBadges } from "./InlineBadges";
+
+interface PostCardProps {
+  post: PostWithAuthor;
+  onDelete?: (postId: string) => void;
+  onPinToggle?: () => void;
+  currentUserId?: string;
+  canModerate?: boolean;
+  onAuthorClick?: (userId: string) => void;
+  communityName?: string;
+}
+
+export function PostCard({ post, onDelete, onPinToggle, currentUserId, canModerate, onAuthorClick, communityName }: PostCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPinning, setIsPinning] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+
+  const isOwnPost = currentUserId === post.author;
+
+  const handleDelete = async () => {
+    if (!confirm('Tem certeza que deseja deletar este post?')) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', post.id);
+
+    if (error) {
+      console.error('Erro ao deletar post:', error);
+      setDeleteError('Não foi possível deletar. Tente novamente ou contate a administração.');
+      setIsDeleting(false);
+      setTimeout(() => setDeleteError(null), 5000);
+      return;
+    }
+
+    if (onDelete) {
+      onDelete(post.id);
+    }
+
+    setIsDeleting(false);
+  };
+
+  const handleTogglePin = async () => {
+    if (isPinning) return;
+    setIsPinning(true);
+
+    const newPinned = !post.is_pinned;
+
+    const { error } = await supabase
+      .from('posts')
+      .update({ is_pinned: newPinned })
+      .eq('id', post.id);
+
+    if (error) {
+      console.error('Erro ao fixar/desafixar post:', error);
+    }
+
+    setIsPinning(false);
+
+    if (onPinToggle) {
+      onPinToggle();
+    }
+  };
+
+  const getTimeAgo = () => {
+    try {
+      const now = new Date();
+      const postDate = new Date(post.created_at);
+      const diffMs = now.getTime() - postDate.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'agora mesmo';
+      if (diffMins < 60) return `há ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+      if (diffHours < 24) return `há ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+      if (diffDays < 7) return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+      return `há ${Math.floor(diffDays / 7)} semana${Math.floor(diffDays / 7) > 1 ? 's' : ''}`;
+    } catch {
+      return 'há alguns instantes';
+    }
+  };
+
+  const getRoleBadge = () => {
+    const roleColors: Record<string, { bg: string; text: string; label: string }> = {
+      super_admin: { bg: 'bg-[#C8102E]/20', text: 'text-[#C8102E]', label: 'Admin' },
+      founder_paid: { bg: 'bg-[#81D8D0]/20', text: 'text-[#81D8D0]', label: 'Fundadora' },
+      moderator: { bg: 'bg-[#6B21A8]/20', text: 'text-[#A855F7]', label: 'Moderador(a)' },
+      member_free_legacy: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },
+      member_paid: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },
+      // Legados V7 (durante transição)
+      admin: { bg: 'bg-[#C8102E]/20', text: 'text-[#C8102E]', label: 'Admin' },
+      founder: { bg: 'bg-[#81D8D0]/20', text: 'text-[#81D8D0]', label: 'Fundadora' },
+      member: { bg: 'bg-[#FF6B35]/20', text: 'text-[#FF6B35]', label: 'Membro' },
+    };
+
+    const role = post.author_data?.role;
+    if (!role) return null;
+    const config = roleColors[role];
+    if (!config) return null;
+
+    return (
+      <span className={`px-2 py-0.5 ${config.bg} ${config.text} rounded-full text-xs font-semibold`}>
+        {config.label}
+      </span>
+    );
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`border rounded-2xl p-6 hover:bg-white/5 transition-colors ${
+        post.is_pinned
+          ? 'bg-[#81D8D0]/5 border-[#81D8D0]/30'
+          : 'bg-white/3 border-white/10'
+      }`}
+    >
+      {/* Badge Fixado */}
+      {post.is_pinned && (
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#81D8D0]/20">
+          <Pin className="h-4 w-4 text-[#81D8D0]" />
+          <span className="text-sm font-semibold text-[#81D8D0]">Fixado</span>
+        </div>
+      )}
+
+      {/* Header do Post */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start gap-3 flex-1">
+          {/* Avatar clicável */}
+          <UserAvatar
+            name={post.author_data?.display_name || post.author_data?.name || 'Anônimo'}
+            photoUrl={post.author_data?.profile_photo}
+            size="lg"
+            onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
+          />
+
+          {/* Info do Autor */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <button
+                onClick={onAuthorClick ? () => onAuthorClick(post.author) : undefined}
+                className={`font-semibold text-white truncate ${onAuthorClick ? 'hover:text-[#81D8D0] transition-colors cursor-pointer' : ''}`}
+              >
+                {post.author_data?.display_name || post.author_data?.name || 'Anônimo'}
+              </button>
+              <InlineBadges userId={post.author} maxVisible={3} />
+              {getRoleBadge()}
+            </div>
+            <div className="flex items-center gap-2 text-sm text-white/60 flex-wrap">
+              <span>{getTimeAgo()}</span>
+              <span>·</span>
+              {post.is_public ? (
+                <span className="flex items-center gap-1">
+                  <Globe className="h-3 w-3" />
+                  Público
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <Lock className="h-3 w-3" />
+                  Membros
+                </span>
+              )}
+              {communityName && (
+                <>
+                  <span>·</span>
+                  <span className="text-[#81D8D0]">{communityName}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Conteúdo do Post */}
+      <div className="mb-4">
+        <p className="text-white/90 text-base leading-relaxed whitespace-pre-wrap">
+          {post.content}
+        </p>
+        
+        {/* Imagem do Post */}
+        {post.image_url && (
+          <div className="mt-4">
+            <img
+              src={post.image_url}
+              alt="Imagem do post"
+              className="w-full max-h-[500px] object-cover rounded-xl"
+              loading="lazy"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Reações — 6 tipos de reação */}
+      <div className="mb-3 pt-3">
+        <ReactionBar postId={post.id} />
+      </div>
+
+      {/* Ações do Post */}
+      <div className="flex items-center gap-4 pt-4 border-t border-white/5 flex-wrap">
+        <button
+          onClick={() => {
+            if (navigator.share) {
+              navigator.share({ 
+                title: 'NeuroConexão Atípica', 
+                text: post.content.substring(0, 100),
+                url: window.location.href 
+              }).catch(() => {});
+            }
+          }}
+          className="flex items-center gap-2 text-white/60 hover:text-[#FF6B35] transition-colors"
+        >
+          <Share2 className="h-5 w-5" />
+          <span className="text-sm font-medium">Compartilhar</span>
+        </button>
+
+        {/* Botão Denúncia estruturada */}
+        <button
+          onClick={() => setIsReportOpen(true)}
+          className="flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors"
+        >
+          <Flag className="h-4 w-4" />
+          <span className="text-sm font-medium">Denunciar</span>
+        </button>
+
+        {/* Botão Fixar/Desafixar (founder/admin) */}
+        {canModerate && (
+          <button
+            onClick={handleTogglePin}
+            disabled={isPinning}
+            className={`flex items-center gap-2 transition-colors disabled:opacity-50 ${
+              post.is_pinned
+                ? 'text-[#81D8D0] hover:text-[#81D8D0]/70'
+                : 'text-white/60 hover:text-[#81D8D0]'
+            }`}
+          >
+            {post.is_pinned ? (
+              <PinOff className="h-4 w-4" />
+            ) : (
+              <Pin className="h-4 w-4" />
+            )}
+            <span className="text-sm font-medium">
+              {post.is_pinned ? 'Desafixar' : 'Fixar'}
+            </span>
+          </button>
+        )}
+
+        {/* Botão Deletar */}
+        {(isOwnPost || canModerate) && onDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="flex items-center gap-2 text-white/60 hover:text-[#C8102E] transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="text-sm font-medium">Deletar</span>
+          </button>
+        )}
+      </div>
+
+      {/* Mensagem de erro ao deletar */}
+      {deleteError && (
+        <div className="mt-3 px-4 py-3 bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-xl flex items-center gap-3">
+          <span className="text-sm text-[#C8102E] font-medium flex-1">{deleteError}</span>
+          <button 
+            onClick={() => setDeleteError(null)}
+            className="text-[#C8102E]/60 hover:text-[#C8102E] text-xs font-semibold"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
+
+      {/* Sistema de Comentários */}
+      <CommentSection
+        postId={post.id}
+        onAuthorClick={onAuthorClick}
+      />
+
+      {/* Modal de denúncia */}
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        contentId={post.id}
+        contentType="post"
+        reportedUserId={post.author}
+      />
+    </motion.div>
+  );
 }

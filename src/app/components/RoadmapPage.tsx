@@ -1,7 +1,234 @@
-{
-  "lote": 3,
-  "status": "pending",
-  "file_path": "src/app/components/RoadmapPage.tsx",
-  "created_at": "2026-02-27T05:36:18.365Z",
-  "file_content": "import { motion } from \"motion/react\";\nimport { ArrowLeft, Zap, Users, MessageCircle, Heart, Camera, Calendar, MapPin, Shield } from \"lucide-react\";\n\ninterface RoadmapPageProps {\n  onBack: () => void;\n}\n\nexport function RoadmapPage({ onBack }: RoadmapPageProps) {\n  const features = [\n    {\n      icon: MessageCircle,\n      title: \"Chat Privado\",\n      description: \"Conversas diretas entre membros, com consentimento mútuo\",\n      color: \"#81D8D0\",\n      status: \"Futuro\"\n    },\n    {\n      icon: Heart,\n      title: \"Likes Conscientes\",\n      description: \"Sistema de reações simples, sem gamificação ou números públicos\",\n      color: \"#C8102E\",\n      status: \"Futuro\"\n    },\n    {\n      icon: Camera,\n      title: \"Upload de Fotos\",\n      description: \"Compartilhe mais imagens no seu perfil e posts\",\n      color: \"#FF6B35\",\n      status: \"Futuro\"\n    },\n    {\n      icon: Users,\n      title: \"Criação de Comunidades\",\n      description: \"Fundadores poderão criar e moderar suas próprias comunidades\",\n      color: \"#81D8D0\",\n      status: \"Futuro\"\n    },\n    {\n      icon: MapPin,\n      title: \"Eventos Presenciais\",\n      description: \"Organização de encontros reais entre membros\",\n      color: \"#FF6B35\",\n      status: \"Futuro\"\n    },\n    {\n      icon: Calendar,\n      title: \"Lives Organizadas\",\n      description: \"Fundadores poderão criar e gerenciar lives e workshops\",\n      color: \"#C8102E\",\n      status: \"Futuro\"\n    }\n  ];\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Header */}\n      <div className=\"w-full bg-[#35363A] border-b border-white/10\">\n        <div className=\"mx-auto max-w-[1000px] px-6 py-4\">\n          <button\n            onClick={onBack}\n            className=\"flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors\"\n          >\n            <ArrowLeft className=\"h-5 w-5\" />\n            <span className=\"font-medium\">Voltar</span>\n          </button>\n        </div>\n      </div>\n\n      {/* Conteúdo */}\n      <div className=\"mx-auto max-w-[1000px] px-6 py-12\">\n        <motion.div\n          initial={{ opacity: 0, y: 30 }}\n          animate={{ opacity: 1, y: 0 }}\n          transition={{ duration: 0.7 }}\n          className=\"space-y-12\"\n        >\n          {/* Hero */}\n          <div className=\"text-center space-y-6\">\n            <div className=\"inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#FF6B35]/20 border-2 border-[#FF6B35]/40 mb-6\">\n              <Zap className=\"h-10 w-10 text-[#FF6B35]\" />\n            </div>\n\n            <h1 className=\"text-4xl md:text-5xl font-semibold text-white leading-tight\">\n              O que estamos construindo\n            </h1>\n\n            <p className=\"text-xl text-white/80 font-normal leading-relaxed max-w-3xl mx-auto\">\n              Este é um espaço vivo, em construção consciente. Estamos começando com o essencial: \n              conexões reais, moderação ética e comunidades curadas.\n            </p>\n          </div>\n\n          {/* Estado Atual */}\n          <motion.div\n            initial={{ opacity: 0, y: 30 }}\n            animate={{ opacity: 1, y: 0 }}\n            transition={{ duration: 0.7, delay: 0.2 }}\n            className=\"bg-gradient-to-br from-[#81D8D0]/20 to-transparent border-2 border-[#81D8D0]/30 rounded-2xl p-8\"\n          >\n            <div className=\"flex items-start gap-4 mb-6\">\n              <Shield className=\"h-8 w-8 text-[#81D8D0] flex-shrink-0 mt-1\" />\n              <div>\n                <h2 className=\"text-2xl font-semibold text-white mb-4\">\n                  Beta Fechado — Fase Atual\n                </h2>\n                <div className=\"space-y-3 text-base text-white/90 font-normal leading-relaxed\">\n                  <p>\n                    <strong className=\"text-white\">✓ 14 Comunidades Curadas</strong> — Espaços com propósito claro e regras específicas\n                  </p>\n                  <p>\n                    <strong className=\"text-white\">✓ Posts de Texto</strong> — Compartilhe pensamentos, dúvidas e reflexões\n                  </p>\n                  <p>\n                    <strong className=\"text-white\">✓ Feed Público</strong> — Alguns posts são visíveis para todos\n                  </p>\n                  <p>\n                    <strong className=\"text-white\">✓ Perfis Editáveis</strong> — Nome, bio, foto e autenticidade\n                  </p>\n                  <p>\n                    <strong className=\"text-white\">✓ Moderação Ativa</strong> — Governança centralizada com ética clara\n                  </p>\n                  <p>\n                    <strong className=\"text-white\">◇ Manifestação de Interesse em Lives</strong> — Sistema para organizar eventos futuros\n                  </p>\n                </div>\n              </div>\n            </div>\n\n            <div className=\"pt-6 border-t border-white/10\">\n              <p className=\"text-sm text-white/70 font-normal\">\n                Estamos focando na base: conexões verdadeiras, segurança ética e comunidade funcional.\n              </p>\n            </div>\n          </motion.div>\n\n          {/* Próximas Funcionalidades */}\n          <div className=\"space-y-6\">\n            <h2 className=\"text-3xl font-semibold text-white text-center\">\n              Funcionalidades Futuras\n            </h2>\n\n            <div className=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n              {features.map((feature, index) => (\n                <motion.div\n                  key={index}\n                  initial={{ opacity: 0, y: 30 }}\n                  animate={{ opacity: 1, y: 0 }}\n                  transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}\n                  className=\"bg-white/3 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all\"\n                >\n                  <div className=\"flex items-start gap-4 mb-4\">\n                    <div \n                      className=\"w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0\"\n                      style={{ \n                        backgroundColor: `${feature.color}20`,\n                        border: `2px solid ${feature.color}40`\n                      }}\n                    >\n                      <feature.icon className=\"h-6 w-6\" style={{ color: feature.color }} />\n                    </div>\n                    <div className=\"flex-1\">\n                      <div className=\"flex items-center gap-2 mb-2\">\n                        <h3 className=\"text-lg font-semibold text-white\">{feature.title}</h3>\n                        <span \n                          className=\"px-2 py-0.5 rounded text-xs font-semibold\"\n                          style={{ \n                            backgroundColor: `${feature.color}20`,\n                            color: feature.color\n                          }}\n                        >\n                          {feature.status}\n                        </span>\n                      </div>\n                      <p className=\"text-sm text-white/70 font-normal leading-relaxed\">\n                        {feature.description}\n                      </p>\n                    </div>\n                  </div>\n                </motion.div>\n              ))}\n            </div>\n          </div>\n\n          {/* Aviso Importante */}\n          <motion.div\n            initial={{ opacity: 0, y: 30 }}\n            animate={{ opacity: 1, y: 0 }}\n            transition={{ duration: 0.7, delay: 1.0 }}\n            className=\"bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-2xl p-8\"\n          >\n            <h3 className=\"text-xl font-semibold text-white mb-4 flex items-center gap-2\">\n              ⚠️ Transparência total\n            </h3>\n            <div className=\"space-y-3 text-base text-white/80 font-normal leading-relaxed\">\n              <p>\n                <strong className=\"text-white\">Algumas funções serão liberadas apenas após o aplicativo principal estar finalizado.</strong>\n              </p>\n              <p>\n                Não prometemos datas. Prometemos <strong className=\"text-[#81D8D0]\">qualidade, ética e cuidado</strong> em cada fase.\n              </p>\n              <p>\n                Este não é um produto. É um <strong className=\"text-[#C8102E]\">espaço vivo</strong>, construído por quem sente e pensa a necessidade dele.\n              </p>\n            </div>\n          </motion.div>\n\n          {/* Visão de Longo Prazo */}\n          <motion.div\n            initial={{ opacity: 0, y: 30 }}\n            animate={{ opacity: 1, y: 0 }}\n            transition={{ duration: 0.7, delay: 1.2 }}\n            className=\"bg-white/3 border border-white/10 rounded-2xl p-8 text-center\"\n          >\n            <h3 className=\"text-2xl font-semibold text-white mb-4\">\n              A visão é clara\n            </h3>\n            <p className=\"text-lg text-white/80 font-normal leading-relaxed max-w-2xl mx-auto mb-6\">\n              Criar uma <strong className=\"text-[#81D8D0]\">rede social funcional</strong> para pessoas intensas, \n              neurodivergentes e profundamente humanas se conectarem — \n              <strong className=\"text-[#FF6B35]\"> para amizade, relacionamento e networking</strong> — \n              sem performar normalidade.\n            </p>\n            <div className=\"pt-6 border-t border-white/10\">\n              <p className=\"text-sm text-[#C0C0C0] italic\">\n                Não é sobre ter todas as funcionalidades agora.<br />\n                É sobre ter as <strong>certas</strong>, no momento <strong>certo</strong>, com <strong>ética clara</strong>.\n              </p>\n            </div>\n          </motion.div>\n        </motion.div>\n      </div>\n    </div>\n  );\n}"
+import { motion } from "motion/react";
+import { ArrowLeft, Zap, Users, MessageCircle, Heart, Camera, Calendar, MapPin, Shield } from "lucide-react";
+
+interface RoadmapPageProps {
+  onBack: () => void;
+}
+
+export function RoadmapPage({ onBack }: RoadmapPageProps) {
+  const features = [
+    {
+      icon: MessageCircle,
+      title: "Chat Privado",
+      description: "Conversas diretas entre membros, com consentimento mútuo",
+      color: "#81D8D0",
+      status: "Futuro"
+    },
+    {
+      icon: Heart,
+      title: "Likes Conscientes",
+      description: "Sistema de reações simples, sem gamificação ou números públicos",
+      color: "#C8102E",
+      status: "Futuro"
+    },
+    {
+      icon: Camera,
+      title: "Upload de Fotos",
+      description: "Compartilhe mais imagens no seu perfil e posts",
+      color: "#FF6B35",
+      status: "Futuro"
+    },
+    {
+      icon: Users,
+      title: "Criação de Comunidades",
+      description: "Fundadores poderão criar e moderar suas próprias comunidades",
+      color: "#81D8D0",
+      status: "Futuro"
+    },
+    {
+      icon: MapPin,
+      title: "Eventos Presenciais",
+      description: "Organização de encontros reais entre membros",
+      color: "#FF6B35",
+      status: "Futuro"
+    },
+    {
+      icon: Calendar,
+      title: "Lives Organizadas",
+      description: "Fundadores poderão criar e gerenciar lives e workshops",
+      color: "#C8102E",
+      status: "Futuro"
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <div className="w-full bg-[#35363A] border-b border-white/10">
+        <div className="mx-auto max-w-[1000px] px-6 py-4">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-white/80 hover:text-[#81D8D0] transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            <span className="font-medium">Voltar</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="mx-auto max-w-[1000px] px-6 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7 }}
+          className="space-y-12"
+        >
+          {/* Hero */}
+          <div className="text-center space-y-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#FF6B35]/20 border-2 border-[#FF6B35]/40 mb-6">
+              <Zap className="h-10 w-10 text-[#FF6B35]" />
+            </div>
+
+            <h1 className="text-4xl md:text-5xl font-semibold text-white leading-tight">
+              O que estamos construindo
+            </h1>
+
+            <p className="text-xl text-white/80 font-normal leading-relaxed max-w-3xl mx-auto">
+              Este é um espaço vivo, em construção consciente. Estamos começando com o essencial: 
+              conexões reais, moderação ética e comunidades curadas.
+            </p>
+          </div>
+
+          {/* Estado Atual */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="bg-gradient-to-br from-[#81D8D0]/20 to-transparent border-2 border-[#81D8D0]/30 rounded-2xl p-8"
+          >
+            <div className="flex items-start gap-4 mb-6">
+              <Shield className="h-8 w-8 text-[#81D8D0] flex-shrink-0 mt-1" />
+              <div>
+                <h2 className="text-2xl font-semibold text-white mb-4">
+                  Beta Fechado — Fase Atual
+                </h2>
+                <div className="space-y-3 text-base text-white/90 font-normal leading-relaxed">
+                  <p>
+                    <strong className="text-white">✓ 14 Comunidades Curadas</strong> — Espaços com propósito claro e regras específicas
+                  </p>
+                  <p>
+                    <strong className="text-white">✓ Posts de Texto</strong> — Compartilhe pensamentos, dúvidas e reflexões
+                  </p>
+                  <p>
+                    <strong className="text-white">✓ Feed Público</strong> — Alguns posts são visíveis para todos
+                  </p>
+                  <p>
+                    <strong className="text-white">✓ Perfis Editáveis</strong> — Nome, bio, foto e autenticidade
+                  </p>
+                  <p>
+                    <strong className="text-white">✓ Moderação Ativa</strong> — Governança centralizada com ética clara
+                  </p>
+                  <p>
+                    <strong className="text-white">◇ Manifestação de Interesse em Lives</strong> — Sistema para organizar eventos futuros
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-sm text-white/70 font-normal">
+                Estamos focando na base: conexões verdadeiras, segurança ética e comunidade funcional.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Próximas Funcionalidades */}
+          <div className="space-y-6">
+            <h2 className="text-3xl font-semibold text-white text-center">
+              Funcionalidades Futuras
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {features.map((feature, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}
+                  className="bg-white/3 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all"
+                >
+                  <div className="flex items-start gap-4 mb-4">
+                    <div 
+                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ 
+                        backgroundColor: `${feature.color}20`,
+                        border: `2px solid ${feature.color}40`
+                      }}
+                    >
+                      <feature.icon className="h-6 w-6" style={{ color: feature.color }} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold text-white">{feature.title}</h3>
+                        <span 
+                          className="px-2 py-0.5 rounded text-xs font-semibold"
+                          style={{ 
+                            backgroundColor: `${feature.color}20`,
+                            color: feature.color
+                          }}
+                        >
+                          {feature.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-white/70 font-normal leading-relaxed">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* Aviso Importante */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 1.0 }}
+            className="bg-[#C8102E]/10 border border-[#C8102E]/30 rounded-2xl p-8"
+          >
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              ⚠️ Transparência total
+            </h3>
+            <div className="space-y-3 text-base text-white/80 font-normal leading-relaxed">
+              <p>
+                <strong className="text-white">Algumas funções serão liberadas apenas após o aplicativo principal estar finalizado.</strong>
+              </p>
+              <p>
+                Não prometemos datas. Prometemos <strong className="text-[#81D8D0]">qualidade, ética e cuidado</strong> em cada fase.
+              </p>
+              <p>
+                Este não é um produto. É um <strong className="text-[#C8102E]">espaço vivo</strong>, construído por quem sente e pensa a necessidade dele.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Visão de Longo Prazo */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 1.2 }}
+            className="bg-white/3 border border-white/10 rounded-2xl p-8 text-center"
+          >
+            <h3 className="text-2xl font-semibold text-white mb-4">
+              A visão é clara
+            </h3>
+            <p className="text-lg text-white/80 font-normal leading-relaxed max-w-2xl mx-auto mb-6">
+              Criar uma <strong className="text-[#81D8D0]">rede social funcional</strong> para pessoas intensas, 
+              neurodivergentes e profundamente humanas se conectarem — 
+              <strong className="text-[#FF6B35]"> para amizade, relacionamento e networking</strong> — 
+              sem performar normalidade.
+            </p>
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-sm text-[#C0C0C0] italic">
+                Não é sobre ter todas as funcionalidades agora.<br />
+                É sobre ter as <strong>certas</strong>, no momento <strong>certo</strong>, com <strong>ética clara</strong>.
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
+    </div>
+  );
 }

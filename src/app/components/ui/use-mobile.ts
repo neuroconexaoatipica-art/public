@@ -1,7 +1,21 @@
-{
-  "lote": 6,
-  "status": "pending",
-  "file_path": "src/app/components/ui/use-mobile.ts",
-  "created_at": "2026-02-27T05:36:31.586Z",
-  "file_content": "import * as React from \"react\";\n\nconst MOBILE_BREAKPOINT = 768;\n\nexport function useIsMobile() {\n  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(\n    undefined,\n  );\n\n  React.useEffect(() => {\n    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);\n    const onChange = () => {\n      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);\n    };\n    mql.addEventListener(\"change\", onChange);\n    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);\n    return () => mql.removeEventListener(\"change\", onChange);\n  }, []);\n\n  return !!isMobile;\n}\n"
+import * as React from "react";
+
+const MOBILE_BREAKPOINT = 768;
+
+export function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(
+    undefined,
+  );
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const onChange = () => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    };
+    mql.addEventListener("change", onChange);
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return !!isMobile;
 }

@@ -1,7 +1,173 @@
-{
-  "lote": 3,
-  "status": "pending",
-  "file_path": "src/app/components/LegalPageView.tsx",
-  "created_at": "2026-02-27T05:36:17.202Z",
-  "file_content": "import { motion } from \"motion/react\";\nimport { \n  Shield, Scale, AlertTriangle, Lock, Eye, Baby,\n  ArrowLeft, FileText\n} from \"lucide-react\";\nimport { useLegalPage, type LegalPageKey } from \"../../lib/useCMS\";\nimport { sanitizeHTML } from \"../../lib/security\";\n\n// Ícone e cor por tipo de página jurídica\nconst PAGE_CONFIG: Record<LegalPageKey, { \n  icon: React.ComponentType<{ className?: string }>; \n  color: string; \n  bgGradient: string;\n}> = {\n  ethics: { \n    icon: Shield, \n    color: 'text-[#81D8D0]',\n    bgGradient: 'from-[#35363A] to-black'\n  },\n  privacy_policy: { \n    icon: Lock, \n    color: 'text-[#81D8D0]',\n    bgGradient: 'from-[#35363A] to-black'\n  },\n  terms_of_use: { \n    icon: FileText, \n    color: 'text-[#81D8D0]',\n    bgGradient: 'from-[#35363A] to-black'\n  },\n  moderation_policy: { \n    icon: Scale, \n    color: 'text-[#FF6B35]',\n    bgGradient: 'from-[#2A2520] to-black'\n  },\n  security_policy: { \n    icon: Eye, \n    color: 'text-[#81D8D0]',\n    bgGradient: 'from-[#35363A] to-black'\n  },\n  child_protection_policy: { \n    icon: Baby, \n    color: 'text-[#C8102E]',\n    bgGradient: 'from-[#2A1A1A] to-black'\n  },\n};\n\ninterface LegalPageViewProps {\n  pageKey: LegalPageKey;\n  /** Componente React fallback — exibido se a página não existir no banco */\n  fallback?: React.ReactNode;\n  onBack?: () => void;\n}\n\nexport function LegalPageView({ pageKey, fallback, onBack }: LegalPageViewProps) {\n  const { page, isLoading, error } = useLegalPage(pageKey);\n  const config = PAGE_CONFIG[pageKey];\n  const Icon = config.icon;\n\n  // Loading\n  if (isLoading) {\n    return (\n      <div className=\"min-h-screen bg-black flex items-center justify-center\">\n        <motion.div\n          initial={{ opacity: 0 }}\n          animate={{ opacity: 1 }}\n          className=\"text-center\"\n        >\n          <div className=\"w-10 h-10 border-3 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4\" />\n          <p className=\"text-white/50 text-sm\">Carregando...</p>\n        </motion.div>\n      </div>\n    );\n  }\n\n  // Erro ou não encontrou — fallback\n  if (error || !page) {\n    if (fallback) return <>{fallback}</>;\n    return (\n      <div className=\"min-h-screen bg-black flex items-center justify-center\">\n        <div className=\"text-center px-6\">\n          <AlertTriangle className=\"h-12 w-12 text-[#C8102E] mx-auto mb-4\" />\n          <h2 className=\"text-xl text-white mb-2\">Página não disponível</h2>\n          <p className=\"text-white/60 mb-6\">\n            {error || 'Esta página jurídica ainda não foi publicada.'}\n          </p>\n          {onBack && (\n            <button\n              onClick={onBack}\n              className=\"text-[#81D8D0] hover:underline flex items-center gap-2 mx-auto\"\n            >\n              <ArrowLeft className=\"h-4 w-4\" />\n              Voltar\n            </button>\n          )}\n        </div>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"min-h-screen bg-black\">\n      {/* Hero */}\n      <section className={`w-full py-20 md:py-28 bg-gradient-to-b ${config.bgGradient}`}>\n        <div className=\"mx-auto max-w-[900px] px-6\">\n          {onBack && (\n            <motion.button\n              initial={{ opacity: 0, x: -10 }}\n              animate={{ opacity: 1, x: 0 }}\n              onClick={onBack}\n              className=\"flex items-center gap-2 text-white/60 hover:text-white mb-8 transition-colors\"\n            >\n              <ArrowLeft className=\"h-4 w-4\" />\n              <span className=\"text-sm\">Voltar</span>\n            </motion.button>\n          )}\n          \n          <motion.div\n            initial={{ opacity: 0, y: 20 }}\n            animate={{ opacity: 1, y: 0 }}\n            transition={{ duration: 0.6 }}\n            className=\"text-center\"\n          >\n            <Icon className={`h-16 w-16 ${config.color} mx-auto mb-6`} />\n            <h1 className=\"text-4xl md:text-5xl lg:text-6xl text-white mb-4\">\n              {page.title}\n            </h1>\n            <p className=\"text-sm text-white/40 mt-4\">\n              Versão {page.version} — Atualizado em{' '}\n              {new Date(page.updated_at).toLocaleDateString('pt-BR', {\n                day: 'numeric',\n                month: 'long',\n                year: 'numeric',\n              })}\n            </p>\n          </motion.div>\n        </div>\n      </section>\n\n      {/* Conteúdo HTML do banco */}\n      <section className=\"w-full py-16 md:py-20 bg-black\">\n        <div className=\"mx-auto max-w-[900px] px-6\">\n          <motion.div\n            initial={{ opacity: 0, y: 30 }}\n            animate={{ opacity: 1, y: 0 }}\n            transition={{ duration: 0.6, delay: 0.2 }}\n            className=\"legal-content bg-white/5 border border-white/10 rounded-2xl p-8 md:p-10\"\n            dangerouslySetInnerHTML={{ __html: sanitizeHTML(page.content_html) }}\n          />\n        </div>\n      </section>\n\n      {/* Rodapé da página */}\n      <section className=\"w-full py-8 bg-black\">\n        <div className=\"mx-auto max-w-[900px] px-6\">\n          <div className=\"text-center pt-8 border-t border-white/10\">\n            <p className=\"text-white/60 text-base\">\n              &copy; 2026 NeuroConexão Atípica. Todos os direitos reservados.\n            </p>\n            {onBack && (\n              <button\n                onClick={onBack}\n                className=\"text-[#81D8D0] hover:underline text-sm mt-4 flex items-center gap-2 mx-auto\"\n              >\n                <ArrowLeft className=\"h-3 w-3\" />\n                Voltar à plataforma\n              </button>\n            )}\n          </div>\n        </div>\n      </section>\n    </div>\n  );\n}"
+import { motion } from "motion/react";
+import { 
+  Shield, Scale, AlertTriangle, Lock, Eye, Baby,
+  ArrowLeft, FileText
+} from "lucide-react";
+import { useLegalPage, type LegalPageKey } from "../../lib/useCMS";
+import { sanitizeHTML } from "../../lib/security";
+
+// Ícone e cor por tipo de página jurídica
+const PAGE_CONFIG: Record<LegalPageKey, { 
+  icon: React.ComponentType<{ className?: string }>; 
+  color: string; 
+  bgGradient: string;
+}> = {
+  ethics: { 
+    icon: Shield, 
+    color: 'text-[#81D8D0]',
+    bgGradient: 'from-[#35363A] to-black'
+  },
+  privacy_policy: { 
+    icon: Lock, 
+    color: 'text-[#81D8D0]',
+    bgGradient: 'from-[#35363A] to-black'
+  },
+  terms_of_use: { 
+    icon: FileText, 
+    color: 'text-[#81D8D0]',
+    bgGradient: 'from-[#35363A] to-black'
+  },
+  moderation_policy: { 
+    icon: Scale, 
+    color: 'text-[#FF6B35]',
+    bgGradient: 'from-[#2A2520] to-black'
+  },
+  security_policy: { 
+    icon: Eye, 
+    color: 'text-[#81D8D0]',
+    bgGradient: 'from-[#35363A] to-black'
+  },
+  child_protection_policy: { 
+    icon: Baby, 
+    color: 'text-[#C8102E]',
+    bgGradient: 'from-[#2A1A1A] to-black'
+  },
+};
+
+interface LegalPageViewProps {
+  pageKey: LegalPageKey;
+  /** Componente React fallback — exibido se a página não existir no banco */
+  fallback?: React.ReactNode;
+  onBack?: () => void;
+}
+
+export function LegalPageView({ pageKey, fallback, onBack }: LegalPageViewProps) {
+  const { page, isLoading, error } = useLegalPage(pageKey);
+  const config = PAGE_CONFIG[pageKey];
+  const Icon = config.icon;
+
+  // Loading
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <div className="w-10 h-10 border-3 border-[#81D8D0] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/50 text-sm">Carregando...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Erro ou não encontrou — fallback
+  if (error || !page) {
+    if (fallback) return <>{fallback}</>;
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center px-6">
+          <AlertTriangle className="h-12 w-12 text-[#C8102E] mx-auto mb-4" />
+          <h2 className="text-xl text-white mb-2">Página não disponível</h2>
+          <p className="text-white/60 mb-6">
+            {error || 'Esta página jurídica ainda não foi publicada.'}
+          </p>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-[#81D8D0] hover:underline flex items-center gap-2 mx-auto"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Hero */}
+      <section className={`w-full py-20 md:py-28 bg-gradient-to-b ${config.bgGradient}`}>
+        <div className="mx-auto max-w-[900px] px-6">
+          {onBack && (
+            <motion.button
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={onBack}
+              className="flex items-center gap-2 text-white/60 hover:text-white mb-8 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="text-sm">Voltar</span>
+            </motion.button>
+          )}
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center"
+          >
+            <Icon className={`h-16 w-16 ${config.color} mx-auto mb-6`} />
+            <h1 className="text-4xl md:text-5xl lg:text-6xl text-white mb-4">
+              {page.title}
+            </h1>
+            <p className="text-sm text-white/40 mt-4">
+              Versão {page.version} — Atualizado em{' '}
+              {new Date(page.updated_at).toLocaleDateString('pt-BR', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Conteúdo HTML do banco */}
+      <section className="w-full py-16 md:py-20 bg-black">
+        <div className="mx-auto max-w-[900px] px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="legal-content bg-white/5 border border-white/10 rounded-2xl p-8 md:p-10"
+            dangerouslySetInnerHTML={{ __html: sanitizeHTML(page.content_html) }}
+          />
+        </div>
+      </section>
+
+      {/* Rodapé da página */}
+      <section className="w-full py-8 bg-black">
+        <div className="mx-auto max-w-[900px] px-6">
+          <div className="text-center pt-8 border-t border-white/10">
+            <p className="text-white/60 text-base">
+              &copy; 2026 NeuroConexão Atípica. Todos os direitos reservados.
+            </p>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="text-[#81D8D0] hover:underline text-sm mt-4 flex items-center gap-2 mx-auto"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                Voltar à plataforma
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 }

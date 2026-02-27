@@ -1,7 +1,143 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useComments.ts",
-  "created_at": "2026-02-27T05:36:03.942Z",
-  "file_content": "import { useState, useEffect, useCallback } from 'react';\nimport { supabase } from './supabase';\nimport type { Comment, User } from './supabase';\n\nexport interface CommentWithAuthor extends Comment {\n  author_data: Pick<User, 'id' | 'name' | 'display_name' | 'profile_photo' | 'role'>;\n}\n\nexport function useComments(postId: string) {\n  const [comments, setComments] = useState<CommentWithAuthor[]>([]);\n  const [isLoading, setIsLoading] = useState(false);\n  const [count, setCount] = useState(0);\n\n  const loadComments = useCallback(async () => {\n    if (!postId) return;\n\n    try {\n      setIsLoading(true);\n\n      const { data, error } = await supabase\n        .from('comments')\n        .select(`\n          *,\n          author_data:users!author (\n            id,\n            name,\n            display_name,\n            profile_photo,\n            role\n          )\n        `)\n        .eq('post_id', postId)\n        .order('created_at', { ascending: true });\n\n      if (error) {\n        console.error('Erro ao buscar comentários:', error);\n\n        // Fallback: buscar sem JOIN\n        const { data: fallbackData } = await supabase\n          .from('comments')\n          .select('*')\n          .eq('post_id', postId)\n          .order('created_at', { ascending: true });\n\n        if (fallbackData) {\n          const authorIds = [...new Set(fallbackData.map(c => c.author))];\n          let authorsMap: Record<string, any> = {};\n\n          if (authorIds.length > 0) {\n            const { data: authors } = await supabase\n              .from('users')\n              .select('id, name, display_name, profile_photo, role')\n              .in('id', authorIds);\n\n            if (authors) {\n              authors.forEach((a: any) => { authorsMap[a.id] = a; });\n            }\n          }\n\n          const commentsWithAuthors = fallbackData.map(comment => ({\n            ...comment,\n            author_data: authorsMap[comment.author] || {\n              id: comment.author,\n              name: 'Membro',\n              profile_photo: null,\n              role: 'member' as const\n            }\n          }));\n\n          setComments(commentsWithAuthors);\n          setCount(commentsWithAuthors.length);\n        }\n        return;\n      }\n\n      setComments((data as CommentWithAuthor[]) || []);\n      setCount(data?.length || 0);\n    } catch (err) {\n      console.error('Erro ao carregar comentários:', err);\n    } finally {\n      setIsLoading(false);\n    }\n  }, [postId]);\n\n  useEffect(() => {\n    loadComments();\n  }, [loadComments]);\n\n  const addComment = async (content: string): Promise<{ success: boolean; error?: string }> => {\n    try {\n      const { data: { session } } = await supabase.auth.getSession();\n      if (!session?.user) {\n        return { success: false, error: 'Você precisa estar logado' };\n      }\n\n      const { error } = await supabase\n        .from('comments')\n        .insert({\n          post_id: postId,\n          author: session.user.id,\n          content: content.trim()\n        });\n\n      if (error) {\n        console.error('Erro ao criar comentário:', error);\n        return { success: false, error: error.message };\n      }\n\n      await loadComments();\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message || 'Erro ao comentar' };\n    }\n  };\n\n  const deleteComment = async (commentId: string): Promise<{ success: boolean; error?: string }> => {\n    try {\n      const { error } = await supabase\n        .from('comments')\n        .delete()\n        .eq('id', commentId);\n\n      if (error) {\n        return { success: false, error: error.message };\n      }\n\n      setComments(prev => prev.filter(c => c.id !== commentId));\n      setCount(prev => prev - 1);\n      return { success: true };\n    } catch (err: any) {\n      return { success: false, error: err.message };\n    }\n  };\n\n  return {\n    comments,\n    count,\n    isLoading,\n    addComment,\n    deleteComment,\n    refreshComments: loadComments\n  };\n}"
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from './supabase';
+import type { Comment, User } from './supabase';
+
+export interface CommentWithAuthor extends Comment {
+  author_data: Pick<User, 'id' | 'name' | 'display_name' | 'profile_photo' | 'role'>;
+}
+
+export function useComments(postId: string) {
+  const [comments, setComments] = useState<CommentWithAuthor[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [count, setCount] = useState(0);
+
+  const loadComments = useCallback(async () => {
+    if (!postId) return;
+
+    try {
+      setIsLoading(true);
+
+      const { data, error } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          author_data:users!author (
+            id,
+            name,
+            display_name,
+            profile_photo,
+            role
+          )
+        `)
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao buscar comentários:', error);
+
+        // Fallback: buscar sem JOIN
+        const { data: fallbackData } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('post_id', postId)
+          .order('created_at', { ascending: true });
+
+        if (fallbackData) {
+          const authorIds = [...new Set(fallbackData.map(c => c.author))];
+          let authorsMap: Record<string, any> = {};
+
+          if (authorIds.length > 0) {
+            const { data: authors } = await supabase
+              .from('users')
+              .select('id, name, display_name, profile_photo, role')
+              .in('id', authorIds);
+
+            if (authors) {
+              authors.forEach((a: any) => { authorsMap[a.id] = a; });
+            }
+          }
+
+          const commentsWithAuthors = fallbackData.map(comment => ({
+            ...comment,
+            author_data: authorsMap[comment.author] || {
+              id: comment.author,
+              name: 'Membro',
+              profile_photo: null,
+              role: 'member' as const
+            }
+          }));
+
+          setComments(commentsWithAuthors);
+          setCount(commentsWithAuthors.length);
+        }
+        return;
+      }
+
+      setComments((data as CommentWithAuthor[]) || []);
+      setCount(data?.length || 0);
+    } catch (err) {
+      console.error('Erro ao carregar comentários:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [postId]);
+
+  useEffect(() => {
+    loadComments();
+  }, [loadComments]);
+
+  const addComment = async (content: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        return { success: false, error: 'Você precisa estar logado' };
+      }
+
+      const { error } = await supabase
+        .from('comments')
+        .insert({
+          post_id: postId,
+          author: session.user.id,
+          content: content.trim()
+        });
+
+      if (error) {
+        console.error('Erro ao criar comentário:', error);
+        return { success: false, error: error.message };
+      }
+
+      await loadComments();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Erro ao comentar' };
+    }
+  };
+
+  const deleteComment = async (commentId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      setComments(prev => prev.filter(c => c.id !== commentId));
+      setCount(prev => prev - 1);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  return {
+    comments,
+    count,
+    isLoading,
+    addComment,
+    deleteComment,
+    refreshComments: loadComments
+  };
 }

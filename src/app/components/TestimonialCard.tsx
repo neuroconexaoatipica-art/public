@@ -1,7 +1,405 @@
-{
-  "lote": 4,
-  "status": "pending",
-  "file_path": "src/app/components/TestimonialCard.tsx",
-  "created_at": "2026-02-27T05:36:23.873Z",
-  "file_content": "import { useState } from \"react\";\nimport { motion, AnimatePresence } from \"motion/react\";\nimport { Heart, Send, Loader2, PenLine, Check, X, Clock, ChevronDown, ChevronUp, Pencil, Trash2 } from \"lucide-react\";\nimport { useMemberTestimonials } from \"../../lib\";\nimport type { MemberTestimonial } from \"../../lib\";\nimport { UserAvatar } from \"./UserAvatar\";\n\ninterface TestimonialCardProps {\n  targetUserId: string;\n  currentUserId?: string;\n  onNavigateToProfile?: (userId: string) => void;\n}\n\nexport function TestimonialCard({ targetUserId, currentUserId, onNavigateToProfile }: TestimonialCardProps) {\n  const {\n    received,\n    pending,\n    isLoading,\n    writeTestimonial,\n    approveTestimonial,\n    rejectTestimonial,\n    editTestimonial,\n    deleteMyTestimonial,\n    receivedCount,\n    pendingCount,\n  } = useMemberTestimonials(targetUserId);\n\n  const [showForm, setShowForm] = useState(false);\n  const [content, setContent] = useState(\"\");\n  const [isSubmitting, setIsSubmitting] = useState(false);\n  const [submitMsg, setSubmitMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);\n  const [showPending, setShowPending] = useState(true);\n  const [processingId, setProcessingId] = useState<string | null>(null);\n  const [editingId, setEditingId] = useState<string | null>(null);\n  const [editText, setEditText] = useState(\"\");\n  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);\n\n  const isOwnProfile = currentUserId === targetUserId;\n  // Check if current user already sent a testimonial (received or pending)\n  const hasWritten = received.some(t => t.from_user === currentUserId) ||\n    pending.some(t => t.from_user === currentUserId);\n\n  const handleSubmit = async () => {\n    if (content.trim().length < 10) return;\n    setIsSubmitting(true);\n    setSubmitMsg(null);\n    const result = await writeTestimonial(targetUserId, content.trim());\n    if (result.success) {\n      setSubmitMsg({ type: 'ok', text: 'Depoimento enviado! Aguardando aprovacao.' });\n      setContent(\"\");\n      setTimeout(() => { setShowForm(false); setSubmitMsg(null); }, 3000);\n    } else {\n      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao enviar.' });\n    }\n    setIsSubmitting(false);\n  };\n\n  const handleApprove = async (id: string) => {\n    setProcessingId(id);\n    await approveTestimonial(id, true);\n    setProcessingId(null);\n  };\n\n  const handleReject = async (id: string) => {\n    setProcessingId(id);\n    await rejectTestimonial(id);\n    setProcessingId(null);\n  };\n\n  const handleEdit = async (id: string) => {\n    setEditingId(id);\n    const testimonial = received.find(t => t.id === id);\n    if (testimonial) {\n      setEditText(testimonial.text);\n    }\n  };\n\n  const handleSaveEdit = async (id: string) => {\n    if (editText.trim().length < 10) return;\n    setProcessingId(id);\n    const result = await editTestimonial(id, editText.trim());\n    if (result.success) {\n      setEditingId(null);\n      setEditText(\"\");\n    } else {\n      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao editar.' });\n    }\n    setProcessingId(null);\n  };\n\n  const handleDelete = async (id: string) => {\n    setProcessingId(id);\n    const result = await deleteMyTestimonial(id);\n    if (result.success) {\n      setConfirmDeleteId(null);\n    } else {\n      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao deletar.' });\n    }\n    setProcessingId(null);\n  };\n\n  function timeAgo(dateStr: string): string {\n    const diff = Date.now() - new Date(dateStr).getTime();\n    const days = Math.floor(diff / 86400000);\n    if (days < 1) return \"hoje\";\n    if (days === 1) return \"ontem\";\n    if (days < 7) return `${days} dias`;\n    if (days < 30) return `${Math.floor(days / 7)} sem`;\n    return `${Math.floor(days / 30)} meses`;\n  }\n\n  return (\n    <div className=\"space-y-4\">\n      {/* Header */}\n      <div className=\"flex items-center justify-between\">\n        <div className=\"flex items-center gap-2\">\n          <Heart className=\"h-4 w-4 text-[#FF6B35]\" />\n          <h3 className=\"text-white text-sm\" style={{ fontWeight: 700 }}>\n            O que despertaram em mim\n            {receivedCount > 0 && (\n              <span className=\"ml-1.5 text-white/30\">({receivedCount})</span>\n            )}\n          </h3>\n          {/* Badge de pendentes — so o dono ve */}\n          {isOwnProfile && pendingCount > 0 && (\n            <span className=\"ml-1 px-2 py-0.5 bg-[#FF6B35]/20 text-[#FF6B35] rounded-full text-[10px] font-bold\">\n              {pendingCount} pendente{pendingCount > 1 ? 's' : ''}\n            </span>\n          )}\n        </div>\n        {!isOwnProfile && !hasWritten && currentUserId && (\n          <motion.button\n            onClick={() => setShowForm(!showForm)}\n            whileHover={{ scale: 1.03 }}\n            whileTap={{ scale: 0.97 }}\n            className=\"flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6B35]/15 border border-[#FF6B35]/25 text-[#FF6B35] rounded-lg text-xs transition-colors hover:bg-[#FF6B35]/20\"\n            style={{ fontWeight: 600 }}\n          >\n            <PenLine className=\"h-3 w-3\" />\n            Escrever\n          </motion.button>\n        )}\n      </div>\n\n      {/* ═══ PENDENTES (so o dono do perfil ve) ═══ */}\n      {isOwnProfile && pendingCount > 0 && (\n        <div className=\"border border-[#FF6B35]/20 rounded-xl overflow-hidden\">\n          <button\n            onClick={() => setShowPending(!showPending)}\n            className=\"w-full flex items-center justify-between px-4 py-3 bg-[#FF6B35]/5 hover:bg-[#FF6B35]/10 transition-colors\"\n          >\n            <div className=\"flex items-center gap-2\">\n              <Clock className=\"h-3.5 w-3.5 text-[#FF6B35]\" />\n              <span className=\"text-xs font-semibold text-[#FF6B35]\">\n                Aguardando sua aprovacao ({pendingCount})\n              </span>\n            </div>\n            {showPending ? (\n              <ChevronUp className=\"h-3.5 w-3.5 text-[#FF6B35]\" />\n            ) : (\n              <ChevronDown className=\"h-3.5 w-3.5 text-[#FF6B35]\" />\n            )}\n          </button>\n\n          <AnimatePresence>\n            {showPending && (\n              <motion.div\n                initial={{ height: 0, opacity: 0 }}\n                animate={{ height: \"auto\", opacity: 1 }}\n                exit={{ height: 0, opacity: 0 }}\n                className=\"overflow-hidden\"\n              >\n                <div className=\"p-3 space-y-3\">\n                  {pending.map((t) => (\n                    <motion.div\n                      key={t.id}\n                      initial={{ opacity: 0, y: 10 }}\n                      animate={{ opacity: 1, y: 0 }}\n                      className=\"bg-white/3 border border-white/8 rounded-xl p-4\"\n                    >\n                      <div className=\"flex items-center gap-2.5 mb-2.5\">\n                        <button\n                          onClick={() => onNavigateToProfile?.(t.from_user)}\n                          className=\"flex items-center gap-2 hover:opacity-80 transition-opacity\"\n                        >\n                          <UserAvatar name={t.author_display_name || t.author_name || \"?\"} photoUrl={t.author_photo} size={28} />\n                          <span className=\"text-white text-xs\" style={{ fontWeight: 600 }}>\n                            {t.author_display_name || t.author_name || \"Membro\"}\n                          </span>\n                        </button>\n                        <span className=\"text-white/20 text-[10px]\">{timeAgo(t.created_at)}</span>\n                      </div>\n                      <p className=\"text-white/60 text-sm leading-relaxed mb-3\" style={{ fontFamily: \"Lora, serif\", fontStyle: \"italic\" }}>\n                        \"{t.text}\"\n                      </p>\n                      {/* Botoes aceitar / rejeitar */}\n                      <div className=\"flex gap-2\">\n                        <motion.button\n                          whileHover={{ scale: 1.02 }}\n                          whileTap={{ scale: 0.98 }}\n                          onClick={() => handleApprove(t.id)}\n                          disabled={processingId === t.id}\n                          className=\"flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#81D8D0]/15 border border-[#81D8D0]/30 text-[#81D8D0] rounded-lg text-xs font-semibold hover:bg-[#81D8D0]/25 transition-colors disabled:opacity-50\"\n                        >\n                          {processingId === t.id ? (\n                            <Loader2 className=\"h-3 w-3 animate-spin\" />\n                          ) : (\n                            <Check className=\"h-3 w-3\" />\n                          )}\n                          Aprovar\n                        </motion.button>\n                        <motion.button\n                          whileHover={{ scale: 1.02 }}\n                          whileTap={{ scale: 0.98 }}\n                          onClick={() => handleReject(t.id)}\n                          disabled={processingId === t.id}\n                          className=\"flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#C8102E]/10 border border-[#C8102E]/25 text-[#C8102E] rounded-lg text-xs font-semibold hover:bg-[#C8102E]/20 transition-colors disabled:opacity-50\"\n                        >\n                          {processingId === t.id ? (\n                            <Loader2 className=\"h-3 w-3 animate-spin\" />\n                          ) : (\n                            <X className=\"h-3 w-3\" />\n                          )}\n                          Rejeitar\n                        </motion.button>\n                      </div>\n                    </motion.div>\n                  ))}\n                </div>\n              </motion.div>\n            )}\n          </AnimatePresence>\n        </div>\n      )}\n\n      {/* Formulario de envio */}\n      <AnimatePresence>\n        {showForm && (\n          <motion.div\n            initial={{ opacity: 0, height: 0 }}\n            animate={{ opacity: 1, height: \"auto\" }}\n            exit={{ opacity: 0, height: 0 }}\n            className=\"overflow-hidden\"\n          >\n            <div className=\"bg-white/3 border border-white/8 rounded-xl p-4\">\n              <textarea\n                value={content}\n                onChange={(e) => setContent(e.target.value)}\n                placeholder=\"Reconheca a presenca desta pessoa neste espaco... (minimo 10 caracteres)\"\n                maxLength={1000}\n                rows={3}\n                className=\"w-full bg-transparent text-white text-sm placeholder:text-white/25 focus:outline-none resize-none\"\n              />\n              {submitMsg && (\n                <div className={`mt-2 text-xs font-semibold ${submitMsg.type === 'ok' ? 'text-[#81D8D0]' : 'text-[#C8102E]'}`}>\n                  {submitMsg.text}\n                </div>\n              )}\n              <div className=\"flex items-center justify-between mt-3\">\n                <span className=\"text-white/20 text-xs\">{content.length}/1000</span>\n                <div className=\"flex gap-2\">\n                  <button\n                    onClick={() => { setShowForm(false); setContent(\"\"); setSubmitMsg(null); }}\n                    className=\"px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors\"\n                  >\n                    Cancelar\n                  </button>\n                  <motion.button\n                    onClick={handleSubmit}\n                    disabled={content.trim().length < 10 || isSubmitting}\n                    whileHover={{ scale: 1.02 }}\n                    whileTap={{ scale: 0.98 }}\n                    className=\"flex items-center gap-1.5 px-4 py-1.5 bg-[#FF6B35] text-white rounded-lg text-xs disabled:opacity-40 transition-all\"\n                    style={{ fontWeight: 600 }}\n                  >\n                    {isSubmitting ? <Loader2 className=\"h-3 w-3 animate-spin\" /> : <Send className=\"h-3 w-3\" />}\n                    Enviar\n                  </motion.button>\n                </div>\n              </div>\n              <p className=\"text-[10px] text-white/20 mt-2\">\n                O depoimento sera enviado para aprovacao antes de aparecer no perfil.\n              </p>\n            </div>\n          </motion.div>\n        )}\n      </AnimatePresence>\n\n      {/* Lista de reconhecimentos aprovados */}\n      {isLoading ? (\n        <div className=\"py-4 text-center\">\n          <Loader2 className=\"h-5 w-5 text-white/20 animate-spin mx-auto\" />\n        </div>\n      ) : received.length === 0 ? (\n        <p className=\"text-white/20 text-xs text-center py-4\">\n          {isOwnProfile ? \"Voce ainda nao recebeu reconhecimentos.\" : \"Nenhum reconhecimento ainda.\"}\n        </p>\n      ) : (\n        <div className=\"space-y-3\">\n          {received.map((t) => (\n            <motion.div\n              key={t.id}\n              initial={{ opacity: 0, y: 10 }}\n              animate={{ opacity: 1, y: 0 }}\n              className=\"bg-white/3 border border-white/6 rounded-xl p-4\"\n            >\n              <div className=\"flex items-center gap-2.5 mb-2.5\">\n                <button\n                  onClick={() => onNavigateToProfile?.(t.from_user)}\n                  className=\"flex items-center gap-2 hover:opacity-80 transition-opacity\"\n                >\n                  <UserAvatar name={t.author_display_name || t.author_name || \"?\"} photoUrl={t.author_photo} size={28} />\n                  <span className=\"text-white text-xs\" style={{ fontWeight: 600 }}>\n                    {t.author_display_name || t.author_name || \"Membro\"}\n                  </span>\n                </button>\n                <span className=\"text-white/20 text-[10px]\">{timeAgo(t.created_at)}</span>\n                {t.from_user === currentUserId && (\n                  <div className=\"ml-2\">\n                    <button\n                      onClick={() => handleEdit(t.id)}\n                      className=\"text-[#FF6B35] hover:text-[#FF6B35]/80 transition-colors\"\n                    >\n                      <Pencil className=\"h-3.5 w-3.5\" />\n                    </button>\n                    <button\n                      onClick={() => setConfirmDeleteId(t.id)}\n                      className=\"text-[#FF6B35] hover:text-[#FF6B35]/80 transition-colors\"\n                    >\n                      <Trash2 className=\"h-3.5 w-3.5\" />\n                    </button>\n                  </div>\n                )}\n              </div>\n              {editingId === t.id ? (\n                <div className=\"space-y-2\">\n                  <textarea\n                    value={editText}\n                    onChange={(e) => setEditText(e.target.value)}\n                    placeholder=\"Reconheca a presenca desta pessoa neste espaco... (minimo 10 caracteres)\"\n                    maxLength={1000}\n                    rows={3}\n                    className=\"w-full bg-transparent text-white text-sm placeholder:text-white/25 focus:outline-none resize-none\"\n                  />\n                  <div className=\"flex items-center justify-between mt-3\">\n                    <span className=\"text-white/20 text-xs\">{editText.length}/1000</span>\n                    <div className=\"flex gap-2\">\n                      <button\n                        onClick={() => { setEditingId(null); setEditText(\"\"); }}\n                        className=\"px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors\"\n                      >\n                        Cancelar\n                      </button>\n                      <motion.button\n                        onClick={() => handleSaveEdit(t.id)}\n                        disabled={editText.trim().length < 10 || processingId === t.id}\n                        whileHover={{ scale: 1.02 }}\n                        whileTap={{ scale: 0.98 }}\n                        className=\"flex items-center gap-1.5 px-4 py-1.5 bg-[#FF6B35] text-white rounded-lg text-xs disabled:opacity-40 transition-all\"\n                        style={{ fontWeight: 600 }}\n                      >\n                        {processingId === t.id ? <Loader2 className=\"h-3 w-3 animate-spin\" /> : <Send className=\"h-3 w-3\" />}\n                        Salvar\n                      </motion.button>\n                    </div>\n                  </div>\n                </div>\n              ) : (\n                <p className=\"text-white/60 text-sm leading-relaxed\" style={{ fontFamily: \"Lora, serif\", fontStyle: \"italic\" }}>\n                  \"{t.text}\"\n                </p>\n              )}\n              {confirmDeleteId === t.id && (\n                <div className=\"mt-2\">\n                  <p className=\"text-[#C8102E] text-xs font-semibold\">\n                    Tem certeza que deseja deletar este reconhecimento?\n                  </p>\n                  <div className=\"flex gap-2 mt-1\">\n                    <button\n                      onClick={() => setConfirmDeleteId(null)}\n                      className=\"px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors\"\n                    >\n                      Cancelar\n                    </button>\n                    <motion.button\n                      onClick={() => handleDelete(t.id)}\n                      disabled={processingId === t.id}\n                      whileHover={{ scale: 1.02 }}\n                      whileTap={{ scale: 0.98 }}\n                      className=\"flex items-center gap-1.5 px-4 py-1.5 bg-[#C8102E] text-white rounded-lg text-xs disabled:opacity-40 transition-all\"\n                      style={{ fontWeight: 600 }}\n                    >\n                      {processingId === t.id ? <Loader2 className=\"h-3 w-3 animate-spin\" /> : <Trash2 className=\"h-3 w-3\" />}\n                      Deletar\n                    </motion.button>\n                  </div>\n                </div>\n              )}\n            </motion.div>\n          ))}\n        </div>\n      )}\n    </div>\n  );\n}"
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Heart, Send, Loader2, PenLine, Check, X, Clock, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
+import { useMemberTestimonials } from "../../lib";
+import type { MemberTestimonial } from "../../lib";
+import { UserAvatar } from "./UserAvatar";
+
+interface TestimonialCardProps {
+  targetUserId: string;
+  currentUserId?: string;
+  onNavigateToProfile?: (userId: string) => void;
+}
+
+export function TestimonialCard({ targetUserId, currentUserId, onNavigateToProfile }: TestimonialCardProps) {
+  const {
+    received,
+    pending,
+    isLoading,
+    writeTestimonial,
+    approveTestimonial,
+    rejectTestimonial,
+    editTestimonial,
+    deleteMyTestimonial,
+    receivedCount,
+    pendingCount,
+  } = useMemberTestimonials(targetUserId);
+
+  const [showForm, setShowForm] = useState(false);
+  const [content, setContent] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [showPending, setShowPending] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const isOwnProfile = currentUserId === targetUserId;
+  // Check if current user already sent a testimonial (received or pending)
+  const hasWritten = received.some(t => t.from_user === currentUserId) ||
+    pending.some(t => t.from_user === currentUserId);
+
+  const handleSubmit = async () => {
+    if (content.trim().length < 10) return;
+    setIsSubmitting(true);
+    setSubmitMsg(null);
+    const result = await writeTestimonial(targetUserId, content.trim());
+    if (result.success) {
+      setSubmitMsg({ type: 'ok', text: 'Depoimento enviado! Aguardando aprovacao.' });
+      setContent("");
+      setTimeout(() => { setShowForm(false); setSubmitMsg(null); }, 3000);
+    } else {
+      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao enviar.' });
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleApprove = async (id: string) => {
+    setProcessingId(id);
+    await approveTestimonial(id, true);
+    setProcessingId(null);
+  };
+
+  const handleReject = async (id: string) => {
+    setProcessingId(id);
+    await rejectTestimonial(id);
+    setProcessingId(null);
+  };
+
+  const handleEdit = async (id: string) => {
+    setEditingId(id);
+    const testimonial = received.find(t => t.id === id);
+    if (testimonial) {
+      setEditText(testimonial.text);
+    }
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (editText.trim().length < 10) return;
+    setProcessingId(id);
+    const result = await editTestimonial(id, editText.trim());
+    if (result.success) {
+      setEditingId(null);
+      setEditText("");
+    } else {
+      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao editar.' });
+    }
+    setProcessingId(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    setProcessingId(id);
+    const result = await deleteMyTestimonial(id);
+    if (result.success) {
+      setConfirmDeleteId(null);
+    } else {
+      setSubmitMsg({ type: 'err', text: result.error || 'Erro ao deletar.' });
+    }
+    setProcessingId(null);
+  };
+
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days < 1) return "hoje";
+    if (days === 1) return "ontem";
+    if (days < 7) return `${days} dias`;
+    if (days < 30) return `${Math.floor(days / 7)} sem`;
+    return `${Math.floor(days / 30)} meses`;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Heart className="h-4 w-4 text-[#FF6B35]" />
+          <h3 className="text-white text-sm" style={{ fontWeight: 700 }}>
+            O que despertaram em mim
+            {receivedCount > 0 && (
+              <span className="ml-1.5 text-white/30">({receivedCount})</span>
+            )}
+          </h3>
+          {/* Badge de pendentes — so o dono ve */}
+          {isOwnProfile && pendingCount > 0 && (
+            <span className="ml-1 px-2 py-0.5 bg-[#FF6B35]/20 text-[#FF6B35] rounded-full text-[10px] font-bold">
+              {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        {!isOwnProfile && !hasWritten && currentUserId && (
+          <motion.button
+            onClick={() => setShowForm(!showForm)}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6B35]/15 border border-[#FF6B35]/25 text-[#FF6B35] rounded-lg text-xs transition-colors hover:bg-[#FF6B35]/20"
+            style={{ fontWeight: 600 }}
+          >
+            <PenLine className="h-3 w-3" />
+            Escrever
+          </motion.button>
+        )}
+      </div>
+
+      {/* ═══ PENDENTES (so o dono do perfil ve) ═══ */}
+      {isOwnProfile && pendingCount > 0 && (
+        <div className="border border-[#FF6B35]/20 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowPending(!showPending)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-[#FF6B35]/5 hover:bg-[#FF6B35]/10 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-[#FF6B35]" />
+              <span className="text-xs font-semibold text-[#FF6B35]">
+                Aguardando sua aprovacao ({pendingCount})
+              </span>
+            </div>
+            {showPending ? (
+              <ChevronUp className="h-3.5 w-3.5 text-[#FF6B35]" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 text-[#FF6B35]" />
+            )}
+          </button>
+
+          <AnimatePresence>
+            {showPending && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-3 space-y-3">
+                  {pending.map((t) => (
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white/3 border border-white/8 rounded-xl p-4"
+                    >
+                      <div className="flex items-center gap-2.5 mb-2.5">
+                        <button
+                          onClick={() => onNavigateToProfile?.(t.from_user)}
+                          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        >
+                          <UserAvatar name={t.author_display_name || t.author_name || "?"} photoUrl={t.author_photo} size={28} />
+                          <span className="text-white text-xs" style={{ fontWeight: 600 }}>
+                            {t.author_display_name || t.author_name || "Membro"}
+                          </span>
+                        </button>
+                        <span className="text-white/20 text-[10px]">{timeAgo(t.created_at)}</span>
+                      </div>
+                      <p className="text-white/60 text-sm leading-relaxed mb-3" style={{ fontFamily: "Lora, serif", fontStyle: "italic" }}>
+                        "{t.text}"
+                      </p>
+                      {/* Botoes aceitar / rejeitar */}
+                      <div className="flex gap-2">
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handleApprove(t.id)}
+                          disabled={processingId === t.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#81D8D0]/15 border border-[#81D8D0]/30 text-[#81D8D0] rounded-lg text-xs font-semibold hover:bg-[#81D8D0]/25 transition-colors disabled:opacity-50"
+                        >
+                          {processingId === t.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Check className="h-3 w-3" />
+                          )}
+                          Aprovar
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handleReject(t.id)}
+                          disabled={processingId === t.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#C8102E]/10 border border-[#C8102E]/25 text-[#C8102E] rounded-lg text-xs font-semibold hover:bg-[#C8102E]/20 transition-colors disabled:opacity-50"
+                        >
+                          {processingId === t.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
+                          Rejeitar
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Formulario de envio */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Reconheca a presenca desta pessoa neste espaco... (minimo 10 caracteres)"
+                maxLength={1000}
+                rows={3}
+                className="w-full bg-transparent text-white text-sm placeholder:text-white/25 focus:outline-none resize-none"
+              />
+              {submitMsg && (
+                <div className={`mt-2 text-xs font-semibold ${submitMsg.type === 'ok' ? 'text-[#81D8D0]' : 'text-[#C8102E]'}`}>
+                  {submitMsg.text}
+                </div>
+              )}
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-white/20 text-xs">{content.length}/1000</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowForm(false); setContent(""); setSubmitMsg(null); }}
+                    className="px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <motion.button
+                    onClick={handleSubmit}
+                    disabled={content.trim().length < 10 || isSubmitting}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-[#FF6B35] text-white rounded-lg text-xs disabled:opacity-40 transition-all"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {isSubmitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    Enviar
+                  </motion.button>
+                </div>
+              </div>
+              <p className="text-[10px] text-white/20 mt-2">
+                O depoimento sera enviado para aprovacao antes de aparecer no perfil.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Lista de reconhecimentos aprovados */}
+      {isLoading ? (
+        <div className="py-4 text-center">
+          <Loader2 className="h-5 w-5 text-white/20 animate-spin mx-auto" />
+        </div>
+      ) : received.length === 0 ? (
+        <p className="text-white/20 text-xs text-center py-4">
+          {isOwnProfile ? "Voce ainda nao recebeu reconhecimentos." : "Nenhum reconhecimento ainda."}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {received.map((t) => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/3 border border-white/6 rounded-xl p-4"
+            >
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <button
+                  onClick={() => onNavigateToProfile?.(t.from_user)}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <UserAvatar name={t.author_display_name || t.author_name || "?"} photoUrl={t.author_photo} size={28} />
+                  <span className="text-white text-xs" style={{ fontWeight: 600 }}>
+                    {t.author_display_name || t.author_name || "Membro"}
+                  </span>
+                </button>
+                <span className="text-white/20 text-[10px]">{timeAgo(t.created_at)}</span>
+                {t.from_user === currentUserId && (
+                  <div className="ml-2">
+                    <button
+                      onClick={() => handleEdit(t.id)}
+                      className="text-[#FF6B35] hover:text-[#FF6B35]/80 transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(t.id)}
+                      className="text-[#FF6B35] hover:text-[#FF6B35]/80 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {editingId === t.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    placeholder="Reconheca a presenca desta pessoa neste espaco... (minimo 10 caracteres)"
+                    maxLength={1000}
+                    rows={3}
+                    className="w-full bg-transparent text-white text-sm placeholder:text-white/25 focus:outline-none resize-none"
+                  />
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-white/20 text-xs">{editText.length}/1000</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setEditingId(null); setEditText(""); }}
+                        className="px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <motion.button
+                        onClick={() => handleSaveEdit(t.id)}
+                        disabled={editText.trim().length < 10 || processingId === t.id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-[#FF6B35] text-white rounded-lg text-xs disabled:opacity-40 transition-all"
+                        style={{ fontWeight: 600 }}
+                      >
+                        {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                        Salvar
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-white/60 text-sm leading-relaxed" style={{ fontFamily: "Lora, serif", fontStyle: "italic" }}>
+                  "{t.text}"
+                </p>
+              )}
+              {confirmDeleteId === t.id && (
+                <div className="mt-2">
+                  <p className="text-[#C8102E] text-xs font-semibold">
+                    Tem certeza que deseja deletar este reconhecimento?
+                  </p>
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="px-3 py-1.5 text-white/40 text-xs hover:text-white/60 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <motion.button
+                      onClick={() => handleDelete(t.id)}
+                      disabled={processingId === t.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-[#C8102E] text-white rounded-lg text-xs disabled:opacity-40 transition-all"
+                      style={{ fontWeight: 600 }}
+                    >
+                      {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      Deletar
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

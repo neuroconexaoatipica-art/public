@@ -1,7 +1,131 @@
-{
-  "lote": 0,
-  "status": "pending",
-  "file_path": "src/lib/useProfile.ts",
-  "created_at": "2026-02-27T05:36:07.369Z",
-  "file_content": "import { useState, useEffect } from 'react';\nimport { supabase } from './supabase';\nimport type { User } from './supabase';\n\nexport function useProfile() {\n  const [user, setUser] = useState<User | null>(null);\n  const [isLoading, setIsLoading] = useState(true);\n\n  const loadProfile = async () => {\n    try {\n      const { data: { session } } = await supabase.auth.getSession();\n      \n      if (!session?.user) {\n        setUser(null);\n        setIsLoading(false);\n        return;\n      }\n\n      const { data, error } = await supabase\n        .from('users')\n        .select('*')\n        .eq('id', session.user.id)\n        .single();\n\n      if (error) throw error;\n\n      setUser(data);\n    } catch (error) {\n      console.error('Erro ao carregar perfil:', error);\n    } finally {\n      setIsLoading(false);\n    }\n  };\n\n  useEffect(() => {\n    let isMounted = true;\n\n    const init = async () => {\n      await loadProfile();\n    };\n\n    init();\n\n    // Escutar mudanças de autenticação (simplificado)\n    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {\n      if (!isMounted) return;\n\n      if (event === 'SIGNED_IN' && session) {\n        await loadProfile();\n      } else if (event === 'SIGNED_OUT') {\n        setUser(null);\n      }\n    });\n\n    return () => {\n      isMounted = false;\n      subscription.unsubscribe();\n    };\n  }, []);\n\n  const updateProfile = async (updates: Partial<User>) => {\n    try {\n      const { data: { session } } = await supabase.auth.getSession();\n      \n      if (!session?.user) {\n        throw new Error('Usuário não autenticado');\n      }\n\n      const { data, error } = await supabase\n        .from('users')\n        .update(updates)\n        .eq('id', session.user.id)\n        .select()\n        .single();\n\n      if (error) throw error;\n\n      setUser(data);\n      return { success: true, data };\n    } catch (error: any) {\n      console.error('Erro ao atualizar perfil:', error);\n      return { success: false, error: error.message };\n    }\n  };\n\n  const uploadPhoto = async (file: File) => {\n    try {\n      const { data: { session } } = await supabase.auth.getSession();\n      \n      if (!session?.user) {\n        throw new Error('Usuário não autenticado');\n      }\n\n      // Criar nome único para o arquivo\n      const fileExt = file.name.split('.').pop();\n      const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;\n      const filePath = `profile-photos/${fileName}`;\n\n      // Upload para Supabase Storage\n      const { error: uploadError } = await supabase.storage\n        .from('avatars')\n        .upload(filePath, file, {\n          cacheControl: '3600',\n          upsert: true\n        });\n\n      if (uploadError) throw uploadError;\n\n      // Obter URL pública\n      const { data: { publicUrl } } = supabase.storage\n        .from('avatars')\n        .getPublicUrl(filePath);\n\n      // Atualizar perfil com nova foto\n      await updateProfile({ profile_photo: publicUrl });\n\n      return { success: true, url: publicUrl };\n    } catch (error: any) {\n      console.error('Erro ao fazer upload de foto:', error);\n      return { success: false, error: error.message };\n    }\n  };\n\n  return {\n    user,\n    isLoading,\n    updateProfile,\n    uploadPhoto,\n    refreshProfile: loadProfile\n  };\n}\n"
+import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+import type { User } from './supabase';
+
+export function useProfile() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) throw error;
+
+      setUser(data);
+    } catch (error) {
+      console.error('Erro ao carregar perfil:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const init = async () => {
+      await loadProfile();
+    };
+
+    init();
+
+    // Escutar mudanças de autenticação (simplificado)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_IN' && session) {
+        await loadProfile();
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const updateProfile = async (updates: Partial<User>) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', session.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setUser(data);
+      return { success: true, data };
+    } catch (error: any) {
+      console.error('Erro ao atualizar perfil:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const uploadPhoto = async (file: File) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Criar nome único para o arquivo
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `profile-photos/${fileName}`;
+
+      // Upload para Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Atualizar perfil com nova foto
+      await updateProfile({ profile_photo: publicUrl });
+
+      return { success: true, url: publicUrl };
+    } catch (error: any) {
+      console.error('Erro ao fazer upload de foto:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  return {
+    user,
+    isLoading,
+    updateProfile,
+    uploadPhoto,
+    refreshProfile: loadProfile
+  };
 }

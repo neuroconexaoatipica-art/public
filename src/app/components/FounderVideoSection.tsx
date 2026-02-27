@@ -1,7 +1,148 @@
-{
-  "lote": 1,
-  "status": "pending",
-  "file_path": "src/app/components/FounderVideoSection.tsx",
-  "created_at": "2026-02-27T05:36:13.414Z",
-  "file_content": "import { useState, useEffect } from \"react\";\nimport { motion } from \"motion/react\";\nimport { Video, Play, ExternalLink, Loader2 } from \"lucide-react\";\nimport { supabase } from \"../../lib/supabase\";\n\ninterface VideoAnnouncement {\n  id: string;\n  title: string;\n  description: string | null;\n  video_url: string;\n  thumbnail_url: string | null;\n  is_active: boolean;\n  created_at: string;\n}\n\nexport function FounderVideoSection() {\n  const [video, setVideo] = useState<VideoAnnouncement | null>(null);\n  const [isLoading, setIsLoading] = useState(true);\n  const [isPlaying, setIsPlaying] = useState(false);\n\n  useEffect(() => {\n    let cancelled = false;\n\n    async function loadVideo() {\n      try {\n        // Buscar video mais recente ativo da tabela home_video_announcements\n        // Se a tabela nao existir ainda, usa fallback silencioso\n        const { data, error } = await supabase\n          .from(\"home_video_announcements\")\n          .select(\"*\")\n          .eq(\"is_active\", true)\n          .order(\"created_at\", { ascending: false })\n          .limit(1);\n\n        if (!error && data && data.length > 0 && !cancelled) {\n          setVideo(data[0]);\n        }\n      } catch {\n        // Tabela pode nao existir ainda — silencioso\n      } finally {\n        if (!cancelled) setIsLoading(false);\n      }\n    }\n\n    loadVideo();\n    return () => { cancelled = true; };\n  }, []);\n\n  // Se nao tem video, nao renderiza nada (nao polui a landing)\n  if (isLoading || !video) return null;\n\n  // Detectar tipo de video (YouTube, Vimeo, direto)\n  const isYoutube = video.video_url.includes(\"youtube.com\") || video.video_url.includes(\"youtu.be\");\n  const isVimeo = video.video_url.includes(\"vimeo.com\");\n\n  function getEmbedUrl(url: string): string {\n    if (url.includes(\"youtube.com/watch\")) {\n      const videoId = new URL(url).searchParams.get(\"v\");\n      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;\n    }\n    if (url.includes(\"youtu.be/\")) {\n      const videoId = url.split(\"youtu.be/\")[1]?.split(\"?\")[0];\n      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;\n    }\n    if (url.includes(\"vimeo.com/\")) {\n      const videoId = url.split(\"vimeo.com/\")[1]?.split(\"?\")[0];\n      return `https://player.vimeo.com/video/${videoId}?autoplay=1`;\n    }\n    return url;\n  }\n\n  return (\n    <section className=\"w-full py-12 md:py-16\" style={{ background: \"#1A1A1A\" }}>\n      <div className=\"mx-auto max-w-[900px] px-6 lg:px-8\">\n        <motion.div\n          initial={{ opacity: 0, y: 20 }}\n          whileInView={{ opacity: 1, y: 0 }}\n          viewport={{ once: true }}\n        >\n          {/* Header */}\n          <div className=\"flex items-center gap-3 mb-6\">\n            <div className=\"w-10 h-10 rounded-full bg-[#C8102E]/15 border border-[#C8102E]/25 flex items-center justify-center\">\n              <Video className=\"h-5 w-5 text-[#C8102E]\" />\n            </div>\n            <div>\n              <h2 className=\"text-white text-lg\" style={{ fontWeight: 700 }}>Mural da Fundadora</h2>\n              <p className=\"text-white/40 text-xs\">Mensagem direta da Mila</p>\n            </div>\n          </div>\n\n          {/* Video Player */}\n          <div className=\"relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video\">\n            {isPlaying && (isYoutube || isVimeo) ? (\n              <iframe\n                src={getEmbedUrl(video.video_url)}\n                className=\"absolute inset-0 w-full h-full\"\n                allow=\"autoplay; fullscreen; picture-in-picture\"\n                allowFullScreen\n                title={video.title}\n              />\n            ) : isPlaying && !isYoutube && !isVimeo ? (\n              <video\n                src={video.video_url}\n                className=\"absolute inset-0 w-full h-full object-cover\"\n                controls\n                autoPlay\n              />\n            ) : (\n              /* Thumbnail com botao play */\n              <button\n                onClick={() => setIsPlaying(true)}\n                className=\"absolute inset-0 w-full h-full flex items-center justify-center group\"\n              >\n                {video.thumbnail_url ? (\n                  <img\n                    src={video.thumbnail_url}\n                    alt={video.title}\n                    className=\"absolute inset-0 w-full h-full object-cover\"\n                  />\n                ) : (\n                  <div className=\"absolute inset-0 bg-gradient-to-br from-[#C8102E]/20 to-[#1A1A1A]\" />\n                )}\n                <div className=\"absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors\" />\n                <motion.div\n                  whileHover={{ scale: 1.1 }}\n                  className=\"relative w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-2xl\"\n                >\n                  <Play className=\"h-7 w-7 text-[#C8102E] ml-1\" />\n                </motion.div>\n              </button>\n            )}\n          </div>\n\n          {/* Titulo e descricao */}\n          <div className=\"mt-4\">\n            <h3 className=\"text-white text-base mb-1\" style={{ fontWeight: 600 }}>{video.title}</h3>\n            {video.description && (\n              <p className=\"text-white/50 text-sm leading-relaxed\">{video.description}</p>\n            )}\n            <p className=\"text-white/20 text-xs mt-2\">\n              {new Date(video.created_at).toLocaleDateString(\"pt-BR\", { day: \"2-digit\", month: \"long\", year: \"numeric\" })}\n            </p>\n          </div>\n        </motion.div>\n      </div>\n    </section>\n  );\n}\n"
+import { useState, useEffect } from "react";
+import { motion } from "motion/react";
+import { Video, Play, ExternalLink, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+
+interface VideoAnnouncement {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string;
+  thumbnail_url: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export function FounderVideoSection() {
+  const [video, setVideo] = useState<VideoAnnouncement | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVideo() {
+      try {
+        // Buscar video mais recente ativo da tabela home_video_announcements
+        // Se a tabela nao existir ainda, usa fallback silencioso
+        const { data, error } = await supabase
+          .from("home_video_announcements")
+          .select("*")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0 && !cancelled) {
+          setVideo(data[0]);
+        }
+      } catch {
+        // Tabela pode nao existir ainda — silencioso
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadVideo();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Se nao tem video, nao renderiza nada (nao polui a landing)
+  if (isLoading || !video) return null;
+
+  // Detectar tipo de video (YouTube, Vimeo, direto)
+  const isYoutube = video.video_url.includes("youtube.com") || video.video_url.includes("youtu.be");
+  const isVimeo = video.video_url.includes("vimeo.com");
+
+  function getEmbedUrl(url: string): string {
+    if (url.includes("youtube.com/watch")) {
+      const videoId = new URL(url).searchParams.get("v");
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    }
+    if (url.includes("youtu.be/")) {
+      const videoId = url.split("youtu.be/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    }
+    if (url.includes("vimeo.com/")) {
+      const videoId = url.split("vimeo.com/")[1]?.split("?")[0];
+      return `https://player.vimeo.com/video/${videoId}?autoplay=1`;
+    }
+    return url;
+  }
+
+  return (
+    <section className="w-full py-12 md:py-16" style={{ background: "#1A1A1A" }}>
+      <div className="mx-auto max-w-[900px] px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-full bg-[#C8102E]/15 border border-[#C8102E]/25 flex items-center justify-center">
+              <Video className="h-5 w-5 text-[#C8102E]" />
+            </div>
+            <div>
+              <h2 className="text-white text-lg" style={{ fontWeight: 700 }}>Mural da Fundadora</h2>
+              <p className="text-white/40 text-xs">Mensagem direta da Mila</p>
+            </div>
+          </div>
+
+          {/* Video Player */}
+          <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video">
+            {isPlaying && (isYoutube || isVimeo) ? (
+              <iframe
+                src={getEmbedUrl(video.video_url)}
+                className="absolute inset-0 w-full h-full"
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
+                title={video.title}
+              />
+            ) : isPlaying && !isYoutube && !isVimeo ? (
+              <video
+                src={video.video_url}
+                className="absolute inset-0 w-full h-full object-cover"
+                controls
+                autoPlay
+              />
+            ) : (
+              /* Thumbnail com botao play */
+              <button
+                onClick={() => setIsPlaying(true)}
+                className="absolute inset-0 w-full h-full flex items-center justify-center group"
+              >
+                {video.thumbnail_url ? (
+                  <img
+                    src={video.thumbnail_url}
+                    alt={video.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#C8102E]/20 to-[#1A1A1A]" />
+                )}
+                <div className="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors" />
+                <motion.div
+                  whileHover={{ scale: 1.1 }}
+                  className="relative w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-2xl"
+                >
+                  <Play className="h-7 w-7 text-[#C8102E] ml-1" />
+                </motion.div>
+              </button>
+            )}
+          </div>
+
+          {/* Titulo e descricao */}
+          <div className="mt-4">
+            <h3 className="text-white text-base mb-1" style={{ fontWeight: 600 }}>{video.title}</h3>
+            {video.description && (
+              <p className="text-white/50 text-sm leading-relaxed">{video.description}</p>
+            )}
+            <p className="text-white/20 text-xs mt-2">
+              {new Date(video.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
 }
