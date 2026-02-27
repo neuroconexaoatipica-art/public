@@ -59,7 +59,6 @@ const EventDetailPage = lazy(() => import("./components/EventDetailPage").then(m
 const MessagesPage = lazy(() => import("./components/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
 const RoadmapPage = lazy(() => import("./components/RoadmapPage").then(m => ({ default: m.RoadmapPage })));
-const DeployBridge = lazy(() => import("./components/DeployBridge").then(m => ({ default: m.DeployBridge })));
 const WaitingRoom = lazy(() => import("./components/WaitingRoom").then(m => ({ default: m.WaitingRoom })));
 const SettingsPage = lazy(() => import("./components/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const FoundersRoom = lazy(() => import("./components/FoundersRoom").then(m => ({ default: m.FoundersRoom })));
